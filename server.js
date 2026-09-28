@@ -221,6 +221,70 @@ function optionGreeks(type, spot, strike, iv, days) {
   return { delta, gamma, theta, vega };
 }
 
+function makeExpirations() {
+  const now = new Date();
+  const out = [];
+  const seen = new Set();
+
+  const add = (date, type) => {
+    const d = new Date(date);
+    d.setHours(16, 0, 0, 0);
+    if (d.getTime() <= Date.now() || seen.has(d.toISOString().slice(0, 10))) return;
+    seen.add(d.toISOString().slice(0, 10));
+    out.push({
+      timestamp: d.getTime(),
+      days: Math.max(1, Math.ceil((d.getTime() - Date.now()) / 86400000)),
+      expirationType: type
+    });
+  };
+
+  // Weekly expirations: next several Friday series.
+  // Some products can also have Monday/Wednesday expirations, so include
+  // the next few business-day short-term series as a simulation.
+  const cursor = new Date(now);
+  for (let i = 0; i < 14; i++) {
+    cursor.setDate(cursor.getDate() + 1);
+    const day = cursor.getDay();
+    if (day === 1 || day === 3 || day === 5) add(cursor, "W");
+  }
+
+  // Standard monthly expirations: third Friday of each month.
+  for (let m = now.getMonth(); m < now.getMonth() + 24; m++) {
+    const d = new Date(now.getFullYear(), m, 1);
+    let fridayCount = 0;
+    for (let day = 1; day <= 31; day++) {
+      const x = new Date(d.getFullYear(), d.getMonth(), day);
+      if (x.getMonth() !== d.getMonth()) break;
+      if (x.getDay() === 5 && ++fridayCount === 3) {
+        add(x, "M");
+        break;
+      }
+    }
+  }
+
+  // Quarterlies: last business day of Mar/Jun/Sep/Dec, up to six quarters.
+  for (let q = 1; q <= 6; q++) {
+    const targetMonth = Math.floor(now.getMonth() / 3) * 3 + q * 3;
+    const last = new Date(now.getFullYear(), targetMonth + 1, 0);
+    while (last.getDay() === 0 || last.getDay() === 6) last.setDate(last.getDate() - 1);
+    add(last, "Q");
+  }
+
+  // LEAPS: long-dated January expirations. The OCC currently lists equity
+  // LEAPS years in advance; include the next four January series.
+  for (let y = now.getFullYear(); y <= now.getFullYear() + 4; y++) {
+    const jan = new Date(y, 0, 1);
+    let thirdFriday = null, count = 0;
+    for (let day = 1; day <= 31; day++) {
+      const x = new Date(y, 0, day);
+      if (x.getDay() === 5 && ++count === 3) { thirdFriday = x; break; }
+    }
+    if (thirdFriday) add(thirdFriday, "L");
+  }
+
+  return out.sort((a, b) => a.timestamp - b.timestamp);
+}
+
 function makeOptionChain(symbol) {
   const stock = market[symbol];
   if (!stock || !Number.isFinite(stock.price) || stock.price <= 0) return [];
@@ -232,10 +296,11 @@ function makeOptionChain(symbol) {
     if (strike > 0 && !strikes.includes(strike)) strikes.push(strike);
   }
   strikes.sort((a, b) => a - b);
-  const expirationDays = [7, 14, 30, 60];
+  const expirations = makeExpirations();
   const contracts = [];
-  for (const days of expirationDays) {
-    const expiration = Date.now() + days * 86400000;
+  for (const exp of expirations) {
+    const expiration = exp.timestamp;
+    const days = exp.days;
     for (const strike of strikes) {
       for (const type of ["call", "put"]) {
         const iv = 0.30;
@@ -245,7 +310,7 @@ function makeOptionChain(symbol) {
         const greeks = optionGreeks(type, stock.price, strike, iv, days);
         contracts.push({
           id: crypto.createHash("sha1").update(symbol + type + strike + days).digest("hex").slice(0, 12),
-          symbol, type, strike, expiration, days,
+          symbol, type, strike, expiration, days, expirationType: exp.expirationType,
           iv: round(iv * 100, 1),
           last: round(mid, 2),
           volume: Math.max(0, Math.round(2500 * Math.exp(-Math.abs(strike - stock.price) / Math.max(1, stock.price * 0.08)) + Math.random() * 250)),
