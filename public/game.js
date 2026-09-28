@@ -123,10 +123,24 @@ async function openRadar(){
     document.querySelectorAll(".radar-click").forEach(e=>e.onclick=()=>{selectSymbol(e.dataset.symbol);d.classList.add("hidden")});
   }catch(e){$("radarBody").innerHTML='<div class="empty">'+esc(e.message)+'</div>'}
 }
-function outlookRow(x){
-  const cls=x.return30>0?"up":x.return30<0?"down":"flat";
+function outlookRow(x,period){
+  const ret=x.returnPeriod;
+  const cls=ret>0?"up":ret<0?"down":"flat";
   const price=x.ask!=null?x.ask:null;
-  return '<button class="radar-row" data-symbol="'+esc(x.symbol)+'"><span><b>'+esc(x.symbol)+'</b><small>'+esc(x.name||"")+' · 30D '+(x.return30>=0?"+":"")+Number(x.return30||0).toFixed(2)+'%</small></span><span class="radar-right"><b class="'+cls+'">'+(x.contractSymbol?esc(x.contractSymbol):"No option")+'</b><small>'+ (price!=null?money(price)+" · ":"") +'score '+(x.setupScore??"—")+'</small></span></button>';
+  return '<button class="radar-row" data-symbol="'+esc(x.symbol)+'"><span><b>'+esc(x.symbol)+'</b><small>'+esc(x.name||"")+' · '+period+'D '+(ret>=0?"+":"")+Number(ret||0).toFixed(2)+'%</small></span><span class="radar-right"><b class="'+cls+'">'+(x.contractSymbol?esc(x.contractSymbol):"No option")+'</b><small>'+ (price!=null?money(price)+" · ":"") +'score '+(x.setupScore??"—")+'</small></span></button>';
+}
+async function loadOutlook(days){
+  const body=$("outlookBody");
+  if(!body)return;
+  body.innerHTML='<div class="empty">Loading '+days+'-day real Alpaca outlook…</div>';
+  try{
+    const r=await api("/api/outlook?days="+encodeURIComponent(days));
+    const rows=(r.stocks||[]).map(x=>outlookRow(x,r.periodDays)).join("")||'<div class="empty">No qualifying real Alpaca option setups were returned.</div>';
+    body.innerHTML='<div class="radar-section"><h3>'+r.periodDays+'-DAY OPTION OUTLOOK</h3><p class="radar-help">Uses real Alpaca historical price data plus current option pricing, liquidity, spread, delta and premium fit. Scores are analytics, not guaranteed returns.</p>'+rows+'</div><div class="radar-foot">Updated '+new Date(r.updatedAt).toLocaleTimeString()+' · '+esc(r.source||"Alpaca")+'</div>';
+    document.querySelectorAll("#outlookBody .radar-row").forEach(e=>e.onclick=()=>{selectSymbol(e.dataset.symbol);$("drawer").classList.add("hidden")});
+  }catch(e){
+    body.innerHTML='<div class="empty">'+esc(e.message)+'</div>';
+  }
 }
 function unusualRow(x){
   const cls=x.type==="call"?"up":"down";
@@ -147,13 +161,9 @@ async function drawer(screen){
     try{const m=await api("/api/news?symbol="+encodeURIComponent(state.selected));b.innerHTML='<div class="drawer-body">'+(m.news||[]).map(n=>'<div class="news-item"><b>'+esc(n.headline)+'</b><small>'+esc(n.source||"Alpaca")+" · "+new Date(n.createdAt).toLocaleString()+'</small><p>'+esc(n.summary||"")+'</p></div>').join("")+'</div>'}catch(e){b.innerHTML='<div class="drawer-body">'+esc(e.message)+'</div>'}
   }else if(screen==="radar"){await openRadar();return;
   }else if(screen==="outlook"){
-    b.innerHTML='<div class="drawer-body"><div class="radar-note">30-DAY OPTION OUTLOOK. Uses real Alpaca daily price history plus real option liquidity, spread, delta and premium data. Scores are analytics, not guaranteed return predictions.</div><div id="outlookBody">Loading 30-day history…</div></div>';
-    try{
-      const r=await api("/api/outlook");
-      const rows=(r.stocks||[]).map(outlookRow).join("")||'<div class="empty">No qualifying real Alpaca option setups were returned.</div>';
-      $("outlookBody").innerHTML='<div class="radar-section"><h3>30-DAY HIGH-RETURN SETUPS</h3><p class="radar-help">Sorted by historical momentum and current option pricing/liquidity fit. A high score does not guarantee a high return.</p>'+rows+'</div><div class="radar-foot">Updated '+new Date(r.updatedAt).toLocaleTimeString()+' · '+esc(r.source||"Alpaca")+'</div>';
-      document.querySelectorAll("#outlookBody .radar-row").forEach(e=>e.onclick=()=>{selectSymbol(e.dataset.symbol);d.classList.add("hidden")});
-    }catch(e){$("outlookBody").innerHTML='<div class="empty">'+esc(e.message)+'</div>'}
+    b.innerHTML='<div class="drawer-body"><div class="radar-note">OUTLOOK. Choose a historical horizon from 30 days through 1 year. Uses real Alpaca price history and current option data. Scores are analytics, not guaranteed returns.</div><div class="outlook-controls"><label>OUTLOOK PERIOD<select id="outlookPeriod"><option value="30">30 DAYS</option><option value="60">60 DAYS</option><option value="90">90 DAYS</option><option value="180">180 DAYS</option><option value="365">1 YEAR</option></select></label></div><div id="outlookBody">Loading outlook…</div></div>';
+    $("outlookPeriod").onchange=e=>loadOutlook(Number(e.target.value));
+    await loadOutlook(30);
   }else if(screen==="volume"){
     b.innerHTML='<div class="drawer-body"><div class="radar-note">UNUSUAL OPTION VOLUME. Real Alpaca option volume ranked against open interest when available. Volume alone does not reveal whether trades were buys or sells.</div><div id="volumeBody">Loading unusual call/put volume…</div></div>';
     try{
