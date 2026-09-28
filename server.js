@@ -501,7 +501,7 @@ wss.on("connection", (ws, req) => {
 });
 
 updateRealMarket();
-setInterval(updateRealMarket, 2000);
+setInterval(updateRealMarket, 10000);
 
 setInterval(savePlayers, 15000);
 
