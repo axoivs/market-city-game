@@ -71,12 +71,9 @@ async function updateRealMarket() {
   try {
     await realMarket.refreshMarket(market, SYMBOLS, round);
 
-    for (const player of Object.values(players)) {
-    for (const option of player.options) {
-      const spot = market[option.symbol]?.price;
-      if (Number.isFinite(spot)) option.marketPrice = round(optionValue(option, spot), 2);
+    if (Object.values(players).some(p => (p.options || []).length)) {
+      await realMarket.refreshOptionPositions(players, round);
     }
-  }
 
     broadcast({
       type: "market",
