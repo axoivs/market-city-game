@@ -160,7 +160,7 @@ const server=http.createServer(async(req,res)=>{
       const result=await real.getOptionChain(symbol,expirationDate);
       return respond(res,200,{symbol,...result,source:"Alpaca/"+(process.env.ALPACA_OPTION_FEED||"indicative")});
     }
-    if(u.pathname==="/api/news"){
+    if(u.pathname==="/api/radar"){\n      const radar=await real.getRadar();\n      return respond(res,200,{...radar,source:"Alpaca"});\n    }\n    if(u.pathname==="/api/news"){
       const symbol=(u.searchParams.get("symbol")||"").toUpperCase();
       const news=await real.getNews(symbol?[symbol]:[]);return respond(res,200,{news,source:"Alpaca"});
     }
