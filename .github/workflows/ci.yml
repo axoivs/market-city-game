@@ -14,4 +14,4 @@ jobs:
         with:
           node-version: 22
       - run: npm install
-      - run: npm run check
+      - run: npm run check && node --check real-market.js && node --check ecosystem.config.cjs
