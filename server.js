@@ -286,40 +286,19 @@ function makeExpirations() {
 }
 
 function makeStrikeLadder(spot) {
-  // "Show All Strikes" style simulation. Real listed strikes vary by
-  // underlying and expiration; this generates a broad, liquid-style ladder
-  // using common $1/$2.50/$5/$10 intervals as price moves farther from spot.
+  // Keep strikes evenly spaced using standard $2.50 / $5 increments.
+  // No irregular strike values such as $3.40, $5.90, or $8.40.
+  const step = spot <= 250 ? 2.5 : 5;
   const out = new Set();
-  const addRange = (from, to, step) => {
-    const start = Math.max(step, Math.floor(from / step) * step);
-    for (let strike = start; strike <= to + step / 2; strike += step) {
-      const rounded = Math.round(strike * 100) / 100;
-      if (rounded > 0) out.add(rounded);
-    }
-  };
 
-  const low = Math.max(1, spot * 0.20);
-  const high = spot * 1.80;
+  const low = Math.max(step, Math.floor((spot * 0.20) / step) * step);
+  const high = Math.ceil((spot * 1.80) / step) * step;
 
-  if (spot <= 100) {
-    addRange(low, high, 1);
-  } else if (spot <= 250) {
-    addRange(low, high, 2.5);
-  } else if (spot <= 500) {
-    addRange(low, high, 5);
-  } else if (spot <= 1000) {
-    addRange(low, high, 5);
-  } else {
-    addRange(low, high, 10);
+  for (let strike = low; strike <= high + step / 2; strike += step) {
+    out.add(Number(strike.toFixed(2)));
   }
 
-  // Always include strikes immediately around the live price.
-  for (const delta of [-10,-5,-2.5,-1,0,1,2.5,5,10]) {
-    const strike = Math.round((spot + delta) * 100) / 100;
-    if (strike > 0) out.add(strike);
-  }
-
-  return [...out].sort((a, b) => a - b);
+  return [...out].sort((x, y) => x - y);
 }
 
 function makeOptionChain(symbol) {
