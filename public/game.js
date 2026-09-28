@@ -130,6 +130,7 @@ function populateSymbols(){
 }
 function selectedStock(){ return state.market.find(s=>s.symbol===state.selected); }
 function formatExpiration(ts){return new Date(ts).toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"});}
+const greek=n=>Number.isFinite(Number(n))?Number(n).toFixed(3):"—";
 function daysToExpiration(ts){return Math.max(0,Math.ceil((ts-Date.now())/86400000));}
 function renderExpirationDates(){const ex=[...new Set(state.options.map(o=>o.expiration))].sort((a,b)=>a-b);expirationEl.innerHTML=ex.map((ts,i)=>`<button class="expiration-btn ${i===0?"active":""}" data-exp="${ts}"><b>${formatExpiration(ts)}</b><small>${daysToExpiration(ts)} days</small></button>`).join("");expirationEl.querySelectorAll(".expiration-btn").forEach(b=>b.onclick=()=>{expirationEl.querySelectorAll(".expiration-btn").forEach(x=>x.classList.remove("active"));b.classList.add("active");renderOptionChain(Number(b.dataset.exp));});if(ex.length)renderOptionChain(ex[0]);}
 function renderOptionChain(expiration){
@@ -137,7 +138,6 @@ function renderOptionChain(expiration){
   if(!rows.length){chainEl.innerHTML='<div class="chain-loading">No option contracts available.</div>';return;}
   const strikes=[...new Set(rows.map(o=>o.strike))], spot=Number(selectedStock()?.price);
   const fmt=n=>Number.isFinite(Number(n))?Number(n).toFixed(2):"—";
-  const greek=n=>Number.isFinite(Number(n))?Number(n).toFixed(3):"—";
   const cls=n=>Number(n)>0?"positive":Number(n)<0?"negative":"muted";
   const selectedExp=expiration||rows[0].expiration, expLabel=formatExpiration(selectedExp);
   const htmlRows=strikes.map(k=>{
