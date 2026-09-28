@@ -257,18 +257,47 @@ function drawPlayer(p,me){
 }
 function setMoveTarget(clientX,clientY){
   const rect=canvas.getBoundingClientRect();
-  const scaleX=canvas.width/rect.width;
-  const scaleY=canvas.height/rect.height;
+  const canvasRatio=canvas.width/canvas.height;
+  const boxRatio=rect.width/rect.height;
+  let drawW=rect.width, drawH=rect.height, offsetX=0, offsetY=0;
+
+  // The canvas uses object-fit:contain, so account for any letterboxing.
+  if(boxRatio>canvasRatio){
+    drawW=rect.height*canvasRatio;
+    offsetX=(rect.width-drawW)/2;
+  }else{
+    drawH=rect.width/canvasRatio;
+    offsetY=(rect.height-drawH)/2;
+  }
+
+  const localX=(clientX-rect.left-offsetX)/drawW*canvas.width;
+  const localY=(clientY-rect.top-offsetY)/drawH*canvas.height;
+
+  if(localX<0||localY<0||localX>canvas.width||localY>canvas.height)return false;
+
   moveTarget={
-    x:Math.max(25,Math.min(1335,(clientX-rect.left)*scaleX)),
-    y:Math.max(40,Math.min(755,(clientY-rect.top)*scaleY))
+    x:Math.max(25,Math.min(1335,localX)),
+    y:Math.max(40,Math.min(755,localY))
   };
+  return true;
 }
-canvas.addEventListener("pointerdown",e=>{
-  if(e.button!==0)return;
-  setMoveTarget(e.clientX,e.clientY);
-  canvas.setPointerCapture?.(e.pointerId);
+
+function handleMapClick(e){
+  if(e.target!==canvas)return;
+  if(setMoveTarget(e.clientX,e.clientY)){
+    e.preventDefault();
+    canvas.classList.add("moving");
+    clearTimeout(canvas.moveClickTimer);
+    canvas.moveClickTimer=setTimeout(()=>canvas.classList.remove("moving"),180);
+  }
+}
+
+// Use both click and pointerup so desktop mice, touch screens, and trackpads work.
+canvas.addEventListener("click",handleMapClick);
+canvas.addEventListener("pointerup",e=>{
+  if(e.pointerType==="touch"||e.pointerType==="pen")handleMapClick(e);
 });
+canvas.addEventListener("touchstart",e=>e.preventDefault(),{passive:false});
 
 function loop(){
   if(state.player){
@@ -297,7 +326,23 @@ function loop(){
       send({type:"move",x:state.player.x,y:state.player.y});
     }
   }
-  drawCity(); requestAnimationFrame(loop);
+  drawCity();
+  if(moveTarget){
+    ctx.save();
+    ctx.strokeStyle="#fff";
+    ctx.lineWidth=2;
+    ctx.beginPath();
+    ctx.arc(moveTarget.x,moveTarget.y,8,0,Math.PI*2);
+    ctx.stroke();
+    ctx.beginPath();
+    ctx.moveTo(moveTarget.x-12,moveTarget.y);
+    ctx.lineTo(moveTarget.x+12,moveTarget.y);
+    ctx.moveTo(moveTarget.x,moveTarget.y-12);
+    ctx.lineTo(moveTarget.x,moveTarget.y+12);
+    ctx.stroke();
+    ctx.restore();
+  }
+  requestAnimationFrame(loop);
 }
 window.addEventListener("keydown",e=>{
   if(["INPUT","SELECT","TEXTAREA"].includes(document.activeElement?.tagName))return;
