@@ -763,6 +763,112 @@ async function getRadar() {
   return result;
 }
 
+const outlookCache = { data: null, at: 0 };
+const volumeCache = { data: null, at: 0 };
+
+async function get30DayOutlook() {
+  if (outlookCache.data && Date.now() - outlookCache.at < 120000) return outlookCache.data;
+  const radar = await getRadar();
+  const candidates = (radar.stocks || [])
+    .filter(x => x.hasOptions && finite(x.price) && x.price > 0 && finite(x.changePct))
+    .sort((a,b) => Math.abs(b.changePct) - Math.abs(a.changePct))
+    .slice(0, 40);
+  const bars = new Map();
+  let cursor = 0;
+  const chunks = [];
+  for (let i=0;i<candidates.length;i+=RADAR_BATCH_SIZE) chunks.push(candidates.slice(i,i+RADAR_BATCH_SIZE).map(x=>x.symbol));
+  async function worker(){
+    while(true){
+      const index=cursor++;
+      if(index>=chunks.length)return;
+      const batch=chunks[index];
+      try{
+        const data=await request(DATA_HOST,"/v2/stocks/bars?symbols="+encodeURIComponent(batch.join(","))+"&timeframe=1Day&limit=35&feed="+encodeURIComponent(STOCK_FEED)+"&adjustment=raw");
+        const map=data?.bars||{};
+        for(const s of batch) if(Array.isArray(map[s])) bars.set(s,map[s]);
+      }catch(e){console.error("30-day outlook bars",index,e.message);}
+    }
+  }
+  await Promise.all(Array.from({length:Math.min(RADAR_CONCURRENCY,chunks.length)},worker));
+
+  const rows=[];
+  for(const stock of candidates){
+    const history=bars.get(stock.symbol)||[];
+    if(history.length<5) continue;
+    const latest=Number(history[history.length-1]?.c);
+    const old30=Number(history[Math.max(0,history.length-31)]?.c);
+    const old10=Number(history[Math.max(0,history.length-11)]?.c);
+    if(!finite(latest)||latest<=0) continue;
+    const return30=finite(old30)&&old30>0?((latest-old30)/old30)*100:null;
+    const return10=finite(old10)&&old10>0?((latest-old10)/old10)*100:null;
+    const absMove=Math.abs(Number(return30||0));
+    const direction=(Number(return30||stock.changePct)>=0)?"call":"put";
+    let option=null;
+    try{
+      const exps=await getExpirations(stock.symbol);
+      const exp=exps.find(d=>{const days=(Date.parse(d+"T23:59:59-04:00")-Date.now())/86400000;return days>=21&&days<=45;})||exps[0];
+      if(exp){
+        const chain=await getOptionChain(stock.symbol,exp);
+        const candidates2=chain.chain.filter(o=>{
+          if(o.type!==direction||!finite(o.strike)||!finite(o.ask)||o.ask<=0)return false;
+          const m=Math.abs(o.strike-latest)/latest;
+          const d=finite(o.delta)?Math.abs(o.delta):0;
+          return m<=0.08 && (!finite(o.delta)||(d>=0.30&&d<=0.70));
+        });
+        candidates2.sort((a,b)=>{
+          const al=(b.volume||0)-(a.volume||0), ad=(b.openInterest||0)-(a.openInterest||0);
+          return al||ad;
+        });
+        option=candidates2[0]||null;
+      }
+    }catch(e){console.error("30-day option lookup",stock.symbol,e.message);}
+    const momentum=clamp(50+(Number(return30||0)*2)+(Number(return10||0)*2),0,100);
+    const liquidity=option?Math.min(100,Math.log10(1+(option.volume||0))*25+Math.log10(1+(option.openInterest||0))*10):0;
+    const spread=option&&finite(option.bid)&&option.bid>0&&finite(option.ask)?((option.ask-option.bid)/option.ask):1;
+    const priceFit=option&&option.ask>0?Math.max(0,100-(option.ask/latest)*100*8):0;
+    const setupScore=round(clamp(momentum*.45+liquidity*.25+(1-Math.min(1,spread))*100*.15+priceFit*.15,0,100),1);
+    rows.push({
+      symbol:stock.symbol,name:stock.name,price:latest,return30:finite(return30)?round(return30,2):null,
+      return10:finite(return10)?round(return10,2):null,direction:direction.toUpperCase(),trend:stock.trend,
+      contractSymbol:option?.contractSymbol||null,type:option?.type||direction,strike:option?.strike??null,
+      expirationDate:option?.expirationDate||null,days:option?.days??null,ask:option?.ask??null,bid:option?.bid??null,
+      delta:option?.delta??null,volume:option?.volume??null,openInterest:option?.openInterest??null,
+      premiumPct:option&&option.ask>0?round((option.ask/latest)*100,2):null,setupScore,real:true
+    });
+  }
+  rows.sort((a,b)=>b.setupScore-a.setupScore);
+  const result={updatedAt:Date.now(),periodDays:30,source:"Alpaca",stocks:rows.slice(0,20),methodology:"30-day and 10-day real price momentum plus real option liquidity, spread, delta and premium-to-stock-price fit. This is a game analytics score, not a guaranteed return prediction."};
+  outlookCache.data=result;outlookCache.at=Date.now();return result;
+}
+
+async function getUnusualOptionVolume() {
+  if(volumeCache.data&&Date.now()-volumeCache.at<120000)return volumeCache.data;
+  const radar=await getRadar();
+  const symbols=[...(radar.up||[]),...(radar.down||[])].filter((x,i,a)=>a.findIndex(y=>y.symbol===x.symbol)===i).slice(0,30).map(x=>x.symbol);
+  const rows=[];
+  for(const symbol of symbols){
+    try{
+      const exps=await getExpirations(symbol);
+      const exp=exps.find(d=>{const days=(Date.parse(d+"T23:59:59-04:00")-Date.now())/86400000;return days>=7&&days<=60;})||exps[0];
+      if(!exp)continue;
+      const chain=await getOptionChain(symbol,exp);
+      for(const o of chain.chain){
+        if(!finite(o.volume)||o.volume<=0)continue;
+        const oi=finite(o.openInterest)&&o.openInterest>0?o.openInterest:null;
+        const ratio=oi?o.volume/oi:o.volume;
+        const notional=finite(o.ask)&&o.ask>0?o.ask*(o.size||100)*o.volume:0;
+        rows.push({symbol,contractSymbol:o.contractSymbol,type:o.type,strike:o.strike,expirationDate:o.expirationDate,days:o.days,
+          volume:o.volume,openInterest:o.openInterest,volumeOiRatio:oi?round(ratio,2):null,ask:o.ask,bid:o.bid,
+          delta:o.delta,notional:round(notional),unusualScore:round(Math.min(100,Math.log10(1+o.volume)*20+(oi?Math.min(50,ratio*20):10)),1),real:true});
+      }
+    }catch(e){console.error("Unusual option volume",symbol,e.message);}
+  }
+  const calls=rows.filter(x=>x.type==="call").sort((a,b)=>b.unusualScore-a.unusualScore||b.volume-a.volume).slice(0,20);
+  const puts=rows.filter(x=>x.type==="put").sort((a,b)=>b.unusualScore-a.unusualScore||b.volume-a.volume).slice(0,20);
+  const result={updatedAt:Date.now(),source:"Alpaca",calls,puts,methodology:"Ranks real Alpaca option volume using volume, volume/open-interest when available, and observed notional. It does not infer whether trades were buys or sells."};
+  volumeCache.data=result;volumeCache.at=Date.now();return result;
+}
+
 function getOptionLive(symbol) { return optionLive.get(symbol) || null; }
 function finite(v) { return v!==null && v!==undefined && v!=="" && Number.isFinite(Number(v)); }
 function round(n, digits = 2) {
