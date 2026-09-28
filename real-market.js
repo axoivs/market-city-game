@@ -170,13 +170,15 @@ function subscribeOptions(symbols) {
 async function refreshMarket(market, symbols, round) {
   const names = Object.keys(symbols);
 
-  const [quotes, trades] = await Promise.all([
+  const [quotes, trades, bars] = await Promise.all([
     request(DATA_HOST, "/v2/stocks/quotes/latest?symbols=" + encodeURIComponent(names.join(",")) + "&feed=" + encodeURIComponent(STOCK_FEED)),
-    request(DATA_HOST, "/v2/stocks/trades/latest?symbols=" + encodeURIComponent(names.join(",")) + "&feed=" + encodeURIComponent(STOCK_FEED))
+    request(DATA_HOST, "/v2/stocks/trades/latest?symbols=" + encodeURIComponent(names.join(",")) + "&feed=" + encodeURIComponent(STOCK_FEED)),
+    request(DATA_HOST, "/v2/stocks/bars?symbols=" + encodeURIComponent(names.join(",")) + "&timeframe=1Min&limit=120&feed=" + encodeURIComponent(STOCK_FEED) + "&adjustment=raw")
   ]);
 
   const qmap = quotes?.quotes || {};
   const tmap = trades?.trades || {};
+  const bmap = bars?.bars || {};
   let loaded = 0;
 
   for (const symbol of names) {
@@ -201,9 +203,14 @@ async function refreshMarket(market, symbols, round) {
 
     stock.updatedAt = trade.t ? Date.parse(trade.t) : (quote.t ? Date.parse(quote.t) : Date.now());
     stock.lastTradeAt = trade.t ? Date.parse(trade.t) : null;
-    stock.history = stock.history || [];
-    if (Number.isFinite(stock.price)) stock.history.push(stock.price);
-    stock.history = stock.history.slice(-120);
+    const realBars = Array.isArray(bmap[symbol]) ? bmap[symbol] : [];
+    const barHistory = realBars.map(b => Number(b.c)).filter(Number.isFinite).slice(-120);
+    if (barHistory.length) stock.history = barHistory;
+    else {
+      stock.history = stock.history || [];
+      if (Number.isFinite(stock.price)) stock.history.push(stock.price);
+      stock.history = stock.history.slice(-120);
+    }
   }
 
   console.log("Alpaca latest stock seed:", loaded + "/" + names.length,
