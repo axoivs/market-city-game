@@ -1,6 +1,6 @@
 const https = require("https");
 const WebSocket = require("ws");
-const { decode } = require("@msgpack/msgpack");
+const { encode, decode } = require("@msgpack/msgpack");
 
 const DATA_HOST = "data.alpaca.markets";
 const TRADING_HOST = process.env.ALPACA_TRADING_HOST || "paper-api.alpaca.markets";
@@ -57,8 +57,9 @@ function request(host, path) {
   });
 }
 
-function auth(ws) {
-  ws.send(JSON.stringify({ action: "auth", key: KEY, secret: SECRET }));
+function auth(ws, msgpack = false) {
+  const message = { action: "auth", key: KEY, secret: SECRET };
+  ws.send(msgpack ? Buffer.from(encode(message)) : JSON.stringify(message));
 }
 
 function scheduleStockReconnect() {
@@ -124,8 +125,10 @@ function applyStock(msg) {
 function connectOptions() {
   credentials();
   if (optionWs && (optionWs.readyState === WebSocket.OPEN || optionWs.readyState === WebSocket.CONNECTING)) return;
-  optionWs = new WebSocket(OPTION_STREAM);
-  optionWs.on("open", () => auth(optionWs));
+  optionWs = new WebSocket(OPTION_STREAM, {
+    headers: { "Content-Type": "application/msgpack" }
+  });
+  optionWs.on("open", () => auth(optionWs, true));
   optionWs.on("message", raw => {
     try {
       const decoded = decode(Buffer.from(raw));
@@ -175,7 +178,7 @@ function subscribeOptions(symbols) {
   const clean = [...new Set(symbols.filter(Boolean))];
   clean.forEach(s => optionSymbols.add(s));
   if (optionWs?.readyState === WebSocket.OPEN && clean.length) {
-    optionWs.send(JSON.stringify({ action: "subscribe", trades: clean, quotes: clean }));
+    optionWs.send(Buffer.from(encode({ action: "subscribe", trades: clean, quotes: clean })));
   }
 }
 
