@@ -166,7 +166,7 @@ function applyOptionStreamMessage(msg) {
   existing.updatedAt = msg.t || existing.updatedAt;
   existing.feed = OPTION_FEED;
   optionCache.set(symbol, existing);
-  if (streamBroadcast) streamBroadcast();
+  if (streamBroadcast) streamBroadcast({ type: "optionTick", contractSymbol: symbol, bid: existing.bid ?? null, ask: existing.ask ?? null, last: existing.last ?? null, updatedAt: existing.updatedAt || null });
 }
 
 function startRealTimeStreams(market, symbols, round, broadcastFn) {
@@ -284,20 +284,18 @@ async function fetchOptionChain(symbol, round) {
   const contracts = await fetchContracts(symbol);
   if (!contracts.length) return [];
 
-  const snapshots = await fetchOptionSnapshots(symbol, contracts.map(c => c.symbol));
+  subscribeOptionSymbols(contracts.map(c => c.symbol));
   const now = Date.now();
 
   return contracts.map(contract => {
-    const snap = snapshots.get(contract.symbol);
-    const quote = snap?.latestQuote;
-    const trade = snap?.latestTrade;
-    const greeks = snap?.greeks || {};
+    const live = getOptionStreamData(contract.symbol) || {};
+    const bid = Number(live.bid);
+    const ask = Number(live.ask);
+    const last = Number(live.last);
+    const greeks = {};
 
     const expiration = new Date(contract.expiration_date + "T16:00:00-04:00").getTime();
     const days = Math.max(0, Math.ceil((expiration - now) / 86400000));
-    const bid = Number(quote?.bp);
-    const ask = Number(quote?.ap);
-    const last = Number(trade?.p);
 
     return {
       id: contract.id || contract.symbol,
@@ -320,7 +318,7 @@ async function fetchOptionChain(symbol, round) {
       volume: null,
       openInterest: Number.isFinite(Number(contract.open_interest)) ? Number(contract.open_interest) : null,
       size: Number(contract.size) || 100,
-      updatedAt: quote?.t || trade?.t || null,
+      updatedAt: live.updatedAt || null,
       feed: OPTION_FEED
     };
   }).filter(o => Number.isFinite(o.strike) && Number.isFinite(o.expiration));
