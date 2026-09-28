@@ -285,19 +285,51 @@ function makeExpirations() {
   return out.sort((a, b) => a.timestamp - b.timestamp);
 }
 
+function makeStrikeLadder(spot) {
+  // "Show All Strikes" style simulation. Real listed strikes vary by
+  // underlying and expiration; this generates a broad, liquid-style ladder
+  // using common $1/$2.50/$5/$10 intervals as price moves farther from spot.
+  const out = new Set();
+  const addRange = (from, to, step) => {
+    const start = Math.max(step, Math.floor(from / step) * step);
+    for (let strike = start; strike <= to + step / 2; strike += step) {
+      const rounded = Math.round(strike * 100) / 100;
+      if (rounded > 0) out.add(rounded);
+    }
+  };
+
+  const low = Math.max(1, spot * 0.20);
+  const high = spot * 1.80;
+
+  if (spot <= 100) {
+    addRange(low, high, 1);
+  } else if (spot <= 250) {
+    addRange(low, high, 2.5);
+  } else if (spot <= 500) {
+    addRange(low, high, 5);
+  } else if (spot <= 1000) {
+    addRange(low, high, 5);
+  } else {
+    addRange(low, high, 10);
+  }
+
+  // Always include strikes immediately around the live price.
+  for (const delta of [-10,-5,-2.5,-1,0,1,2.5,5,10]) {
+    const strike = Math.round((spot + delta) * 100) / 100;
+    if (strike > 0) out.add(strike);
+  }
+
+  return [...out].sort((a, b) => a - b);
+}
+
 function makeOptionChain(symbol) {
   const stock = market[symbol];
   if (!stock || !Number.isFinite(stock.price) || stock.price <= 0) return [];
-  // Generate the full simulated strike ladder around the live price.
-  // 41 strikes: 20% below spot through 20% above spot, in 1% increments.
-  const strikes = [];
-  for (let pct = -20; pct <= 20; pct++) {
-    const strike = round(stock.price * (1 + pct / 100), 0);
-    if (strike > 0 && !strikes.includes(strike)) strikes.push(strike);
-  }
-  strikes.sort((a, b) => a - b);
+
+  const strikes = makeStrikeLadder(stock.price);
   const expirations = makeExpirations();
   const contracts = [];
+
   for (const exp of expirations) {
     const expiration = exp.timestamp;
     const days = exp.days;
@@ -309,7 +341,7 @@ function makeOptionChain(symbol) {
         const spread = Math.max(0.03, mid * 0.08);
         const greeks = optionGreeks(type, stock.price, strike, iv, days);
         contracts.push({
-          id: crypto.createHash("sha1").update(symbol + type + strike + days).digest("hex").slice(0, 12),
+          id: crypto.createHash("sha1").update(symbol + type + strike + expiration).digest("hex").slice(0, 12),
           symbol, type, strike, expiration, days, expirationType: exp.expirationType,
           iv: round(iv * 100, 1),
           last: round(mid, 2),
