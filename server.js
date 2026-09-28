@@ -63,6 +63,24 @@ function fetchRealQuote(symbol) {
   });
 }
 
+async function updateRealMarket() {
+  await realMarket.refreshMarket(market, SYMBOLS, round);
+
+  for (const player of Object.values(players)) {
+    for (const option of player.options) {
+      const spot = market[option.symbol]?.price;
+      if (Number.isFinite(spot)) option.marketPrice = round(optionValue(option, spot), 2);
+    }
+  }
+
+  broadcast({
+    type: "market",
+    market: marketPayload(),
+    leaderboard: leaderboard(),
+    online: sockets.size
+  });
+}
+
 const sockets = new Map();
 const worldPlayers = new Map();
 
