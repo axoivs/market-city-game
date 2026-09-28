@@ -13,7 +13,7 @@ const dateLabel=d=>new Date(d+"T12:00:00").toLocaleDateString(undefined,{month:"
 function toast(m){const e=$("toast");e.textContent=m;e.classList.add("show");clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove("show"),2300)}
 function api(url,opt){return fetch(url,opt).then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||"Request failed");return d})}
 function getId(){let x=localStorage.getItem("marketCityPlayerId");if(x)return x;if(crypto?.randomUUID)x=crypto.randomUUID();else x="player-"+Date.now()+"-"+Math.random().toString(36).slice(2);localStorage.setItem("marketCityPlayerId",x);return x}
-const playerId=getId();
+let playerId=getId();
 function send(m){if(ws?.readyState===WebSocket.OPEN)ws.send(JSON.stringify(m));else toast("Live Alpaca connection is reconnecting.")}
 function connect(){clearTimeout(reconnectTimer);ws=new WebSocket("wss://"+location.host+"?playerId="+encodeURIComponent(playerId));ws.onopen=()=>{ $("marketState").textContent="ALPACA STREAM";$("marketState").className="market-state live"};ws.onmessage=e=>handle(JSON.parse(e.data));ws.onerror=()=>{$("marketState").textContent="STREAM ERROR";$("marketState").className="market-state off"};ws.onclose=()=>{ $("marketState").textContent="RECONNECTING";$("marketState").className="market-state off";reconnectTimer=setTimeout(connect,3000)}}
 function handle(m){
@@ -118,7 +118,7 @@ async function accountAction(kind){
   $("accountStatus").textContent=kind==="createAccount"?"Creating login…":"Logging in…";
   try{
     const d=await api("/api/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({type:kind,playerId,username,code,watchlist:watchlist()})});
-    localStorage.setItem("marketCityPlayerId",d.playerId);
+    playerId=d.playerId;localStorage.setItem("marketCityPlayerId",playerId);
     if(d.player){state.player=d.player;state.watchlist=Array.isArray(d.player.watchlist)?d.player.watchlist:watchlist();state.market=state.market.filter(x=>watchHas(x.symbol));}
     $("accountModal").classList.add("hidden");$("accountStatus").textContent="";
     if(ws)try{ws.close()}catch{}
