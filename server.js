@@ -138,6 +138,18 @@ const server=http.createServer(async(req,res)=>{
       const p=player(id);return respond(res,200,{playerId:id,player:publicPlayer(p),market:marketPayload(),leaderboard:leaderboard(),online:sockets.size,marketReady});
     }
     if(u.pathname==="/api/market")return respond(res,200,{market:marketPayload(),online:sockets.size,marketReady});
+    if(u.pathname==="/api/assets"){
+      const search=u.searchParams.get("search")||"";
+      const assets=await real.getAssets(search);
+      return respond(res,200,{assets,source:"Alpaca"});
+    }
+    if(u.pathname==="/api/stock"){
+      const symbol=(u.searchParams.get("symbol")||"").toUpperCase();
+      const quote=await real.getStockQuote(symbol);
+      market[symbol]=quote;
+      marketReady=true;
+      return respond(res,200,{stock:real.publicStock(quote),source:"Alpaca/"+(process.env.ALPACA_STOCK_FEED||"iex")});
+    }
     if(u.pathname==="/api/options/expirations"){
       const symbol=(u.searchParams.get("symbol")||"AAPL").toUpperCase();
       const expirations=await real.getExpirations(symbol);return respond(res,200,{symbol,expirations,source:"Alpaca"});
