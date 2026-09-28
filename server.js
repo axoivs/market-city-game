@@ -445,7 +445,7 @@ wss.on("connection", (ws, req) => {
   sendState(ws, player);
   broadcast({ type: "players", players: [...worldPlayers.values()] });
 
-  ws.on("message", raw => {
+  ws.on("message", async raw => {
     try {
       const msg = JSON.parse(raw.toString());
 
