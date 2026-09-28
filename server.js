@@ -306,38 +306,36 @@ function tradeStock(player, symbol, side, quantity) {
   savePlayers();
 }
 
-function tradeOption(player, payload) {
+async function tradeOption(player, payload) {
   const symbol = String(payload.symbol || "").toUpperCase();
   const type = String(payload.type || "").toLowerCase();
-  const strike = safeNumber(payload.strike);
+  const contractSymbol = String(payload.contractSymbol || "");
   const quantity = Math.floor(safeNumber(payload.quantity, 1));
-  const stock = market[symbol];
 
-  if (!stock || !["call", "put"].includes(type) || !Number.isFinite(strike) || strike <= 0 ||
-      quantity < 1 || quantity > 100) {
+  if (!["call", "put"].includes(type) || quantity < 1 || quantity > 100) {
     throw new Error("Invalid option order");
   }
 
-  if (!Number.isFinite(stock.price) || stock.price <= 0) {
-    throw new Error("The live stock price is still loading. Please try again in a few seconds.");
+  const chain = await realMarket.fetchOptionChain(symbol, round);
+  const contract = chain.find(o =>
+    o.contractSymbol === contractSymbol &&
+    o.type === type
+  );
+
+  if (!contract) {
+    throw new Error("The selected real option contract is no longer available.");
   }
 
-  // Keep option pricing stable and independent of the old simulated-volatility fields.
-  const iv = 0.30;
-  const expiration = Date.now() + 30 * 86400000;
-  const temp = { type, symbol, strike, expiration, iv };
-  const mid = optionValue(temp, stock.price);
-
-  if (!Number.isFinite(mid) || mid <= 0) {
-    throw new Error("Unable to price this option from the current market quote.");
+  const ask = Number(contract.ask);
+  if (!Number.isFinite(ask) || ask <= 0) {
+    throw new Error("No real-time ask is currently available for this option.");
   }
 
-  const ask = round(mid * 1.04 + 0.02, 2);
-  const cost = round(ask * quantity * 100);
-
+  const cost = round(ask * quantity * (contract.size || 100));
   if (!Number.isFinite(cost) || cost <= 0) {
-    throw new Error("Unable to calculate the option premium.");
+    throw new Error("Unable to calculate the real option premium.");
   }
+
   if (cost > player.cash) {
     throw new Error("Not enough virtual cash for this option order.");
   }
@@ -346,13 +344,19 @@ function tradeOption(player, payload) {
   player.options.push({
     id: crypto.randomUUID(),
     symbol,
-    type,
-    strike,
+    contractSymbol: contract.contractSymbol,
+    type: contract.type,
+    strike: contract.strike,
     quantity,
-    expiration,
-    iv,
+    expiration: contract.expiration,
     entryPrice: ask,
-    marketPrice: ask
+    marketPrice: ask,
+    size: contract.size || 100,
+    iv: contract.iv,
+    delta: contract.delta,
+    gamma: contract.gamma,
+    theta: contract.theta,
+    vega: contract.vega
   });
 
   completeMission(player, "firstTrade");
@@ -570,7 +574,7 @@ wss.on("connection", (ws, req) => {
       }
 
       if (msg.type === "optionOrder") {
-        tradeOption(player, msg);
+        await tradeOption(player, msg);
         sendState(ws, player);
         return;
       }
