@@ -18,6 +18,7 @@ if (!playerId) {
 }
 const ws = new WebSocket("wss://" + location.host + "?playerId=" + encodeURIComponent(playerId));
 const state = { player: null, market: [], others: [], leaderboard: [], online: 0, selected: "AAPL", options: [] };
+let optionsLoadedFor = "";
 
 async function httpBootstrap() {
   try {
@@ -183,6 +184,7 @@ async function loadOptions(){
   const data=await r.json();
   if(!r.ok) throw new Error(data.error || "Real option data unavailable");
   state.options=data.chain||[];
+  optionsLoadedFor=state.selected;
   renderExpirationDates(); renderOptionChain();
   $("contract").innerHTML=state.options.map((o,i)=>`<option value="${i}">${o.type.toUpperCase()} ${o.strike} · ${formatExpiration(o.expiration)} · ask ${o.ask == null ? "—" : money(o.ask)}</option>`).join("");
   renderOptionInfo();
@@ -190,6 +192,7 @@ async function loadOptions(){
 
 function renderOptionInfo(){const o=state.options[Number($("contract").value)||0];if(!o){$("greeks").textContent="No option chain";return;}$("greeks").innerHTML=`EXP ${formatExpiration(o.expiration)} · ${daysToExpiration(o.expiration)} days<br>Δ ${o.delta} · Γ ${o.gamma}<br>Θ ${o.theta} · Vega ${o.vega}<br>100 shares/contract · virtual pricing`;}
 function selectSymbol(sym){
+  const symbolChanged = state.selected !== sym;
   state.selected=sym;
   if(chainSymbolEl) chainSymbolEl.textContent=sym;
   $("symbol").value=sym;
@@ -213,7 +216,7 @@ function selectSymbol(sym){
   const updated=s.lastTradeAt?new Date(s.lastTradeAt).toLocaleTimeString():"waiting";
   const changeText=s.change==null?"—":`${s.change>=0?"+":""}${money(s.change)} (${s.changePct>=0?"+":""}${s.changePct}%)`;
   $("quote").innerHTML=`<div class="quote-price">${s.price==null?"Waiting…":money(s.price)}</div><div class="quote-change ${cls}">${changeText}</div>${chart}<div class="quote-meta">REAL MARKET DATA · updated ${updated}</div>`;
-  loadOptions();
+  if (symbolChanged || optionsLoadedFor !== sym) loadOptions().catch(err => console.error("Options chain load failed:", err));
 }
 
 function pxRect(x,y,w,h,fill,stroke){
@@ -333,7 +336,7 @@ ws.addEventListener("message",e=>{
 });
 
 $("symbol").onchange=e=>selectSymbol(e.target.value);
-$("chainRefresh").onclick=()=>loadOptions().then(()=>toast("Options chain refreshed")).catch(()=>toast("Unable to refresh options chain"));
+$("chainRefresh").onclick=()=>{ optionsLoadedFor=""; loadOptions().then(()=>toast("Options chain refreshed")).catch(()=>toast("Unable to refresh options chain")); };
 $("contract").onchange=renderOptionInfo;
 $("buyStock").onclick=()=>send({type:"stockOrder",symbol:state.selected,side:"buy",quantity:Number($("shares").value)});
 $("sellStock").onclick=()=>send({type:"stockOrder",symbol:state.selected,side:"sell",quantity:Number($("shares").value)});
