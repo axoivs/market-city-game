@@ -1,399 +1,45 @@
-const chainEl = document.getElementById("optionChain");
-const expirationEl = document.getElementById("expirationDates");
-const chainSymbolEl = document.getElementById("chainSymbol");
-let playerId = localStorage.getItem("marketCityPlayerId");
-if (!playerId) {
-  if (globalThis.crypto?.randomUUID) {
-    playerId = crypto.randomUUID();
-  } else if (globalThis.crypto?.getRandomValues) {
-    const bytes = new Uint8Array(16);
-    crypto.getRandomValues(bytes);
-    bytes[6] = (bytes[6] & 0x0f) | 0x40;
-    bytes[8] = (bytes[8] & 0x3f) | 0x80;
-    playerId = [...bytes].map((b,i) => ([4,6,8,10].includes(i) ? "-" : "") + b.toString(16).padStart(2,"0")).join("");
-  } else {
-    playerId = "player-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
-  }
-  localStorage.setItem("marketCityPlayerId", playerId);
+const $=id=>document.getElementById(id);
+const state={player:null,market:[],selected:"AAPL",options:[],expirations:[],expiration:"",selectedContract:null,leaderboard:[],online:0,marketReady:false};
+let ws=null,reconnectTimer=null,chainSeq=0;
+const money=n=>Number.isFinite(Number(n))?"$"+Number(n).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}):"—";
+const px=n=>Number.isFinite(Number(n))?"$"+Number(n).toFixed(2):"—";
+const num=n=>Number.isFinite(Number(n))?Number(n).toFixed(3):"—";
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const dateLabel=d=>new Date(d+"T12:00:00").toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"});
+function toast(m){const e=$("toast");e.textContent=m;e.classList.add("show");clearTimeout(toast.t);toast.t=setTimeout(()=>e.classList.remove("show"),2300)}
+function api(url,opt){return fetch(url,opt).then(async r=>{const d=await r.json();if(!r.ok)throw Error(d.error||"Request failed");return d})}
+function getId(){let x=localStorage.getItem("marketCityPlayerId");if(x)return x;if(crypto?.randomUUID)x=crypto.randomUUID();else x="player-"+Date.now()+"-"+Math.random().toString(36).slice(2);localStorage.setItem("marketCityPlayerId",x);return x}
+const playerId=getId();
+function send(m){if(ws?.readyState===WebSocket.OPEN)ws.send(JSON.stringify(m));else toast("Live Alpaca connection is reconnecting.")}
+function connect(){clearTimeout(reconnectTimer);ws=new WebSocket("wss://"+location.host+"?playerId="+encodeURIComponent(playerId));ws.onopen=()=>{ $("marketState").textContent="ALPACA STREAM";$("marketState").className="market-state live"};ws.onmessage=e=>handle(JSON.parse(e.data));ws.onerror=()=>{$("marketState").textContent="STREAM ERROR";$("marketState").className="market-state off"};ws.onclose=()=>{ $("marketState").textContent="RECONNECTING";$("marketState").className="market-state off";reconnectTimer=setTimeout(connect,3000)}}
+function handle(m){
+ if(m.type==="state"||m.type==="market"){if(m.player)state.player=m.player;if(m.market)state.market=m.market;if(m.leaderboard)state.leaderboard=m.leaderboard;if(Number.isFinite(m.online))state.online=m.online;if(typeof m.marketReady==="boolean")state.marketReady=m.marketReady;renderAll();if(m.type==="state")loadExpirations();return}
+ if(m.type==="marketTick"){const i=state.market.findIndex(x=>x.symbol===m.stock.symbol);if(i<0)state.market.push(m.stock);else state.market[i]=m.stock;renderWatchlist();renderQuote();renderChart();renderTicket();return}
+ if(m.type==="optionTick"){const o=state.options.find(x=>x.contractSymbol===m.contractSymbol);if(o){if(m.bid!=null)o.bid=Number(m.bid);if(m.ask!=null)o.ask=Number(m.ask);if(m.last!=null)o.last=Number(m.last);o.mid=Number.isFinite(o.bid)&&Number.isFinite(o.ask)?(o.bid+o.ask)/2:null;o.updatedAt=m.updatedAt;renderChain();renderOptionTicket()}return}
+ if(m.type==="error")toast(m.message||"Request failed");
 }
-const ws = new WebSocket("wss://" + location.host + "?playerId=" + encodeURIComponent(playerId));
-const state = { player: null, market: [], others: [], leaderboard: [], online: 0, selected: "AAPL", options: [] };
-let optionsLoadedFor = "";
-
-async function httpBootstrap() {
-  try {
-    const r = await fetch("/api/bootstrap?playerId=" + encodeURIComponent(playerId) + "&_=" + Date.now(), {cache:"no-store"});
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    const msg = await r.json();
-    state.player = msg.player;
-    state.market = msg.market || [];
-    state.leaderboard = msg.leaderboard || [];
-    state.online = msg.online || 0;
-    populateSymbols();
-    renderWatchlist();
-    renderHeader();
-    selectSymbol(state.selected);
-    drawCity();
-    return true;
-  } catch (err) {
-    console.error("HTTP bootstrap failed:", err);
-    return false;
-  }
-}
-
-async function httpAction(payload) {
-  const r = await fetch("/api/action", {
-    method: "POST",
-    headers: {"Content-Type":"application/json"},
-    body: JSON.stringify({...payload, playerId})
-  });
-  const data = await r.json();
-  if (!r.ok) throw new Error(data.error || "Request failed");
-  state.player = data.player;
-  state.market = data.market || state.market;
-  state.leaderboard = data.leaderboard || state.leaderboard;
-  state.online = data.online || 0;
-  renderWatchlist();
-  renderHeader();
-  selectSymbol(state.selected);
-  return data;
-}
-
-function startHttpMarketFallback() {
-  httpBootstrap();
-  setInterval(async () => {
-    try {
-      const r = await fetch("/api/market?_=" + Date.now(), {cache:"no-store"});
-      if (!r.ok) return;
-      const data = await r.json();
-      state.market = data.market || state.market;
-      state.leaderboard = data.leaderboard || state.leaderboard;
-      state.online = data.online || 0;
-      renderWatchlist();
-      renderHeader();
-      selectSymbol(state.selected);
-    } catch {}
-  }, 3000);
-}
-
-
-const keys = new Set();
-let moveTarget = null;
-const buildings = [
-  {x:155,y:72,w:255,h:160,name:"STOCK EXCHANGE",kind:"exchange"},
-  {x:455,y:72,w:235,h:160,name:"NEWS CENTER",kind:"news"},
-  {x:735,y:72,w:250,h:160,name:"OPTIONS EXCHANGE",kind:"options"},
-  {x:1030,y:72,w:225,h:160,name:"BANK",kind:"bank"},
-  {x:150,y:385,w:270,h:165,name:"TRADING FLOOR",kind:"trading"},
-  {x:470,y:395,w:230,h:175,name:"PLAYER APARTMENTS",kind:"home"},
-  {x:750,y:385,w:255,h:175,name:"COMPANY HQ",kind:"hq"},
-  {x:1050,y:395,w:205,h:175,name:"RISK DISTRICT",kind:"risk"}
-];
-
-const $ = id => document.getElementById(id);
-const money = n => "$" + Number(n || 0).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});
-function toast(msg) {
-  const el=$("toast"); el.textContent=msg; el.classList.add("show");
-  clearTimeout(toast.t); toast.t=setTimeout(()=>el.classList.remove("show"),2200);
-}
-function send(obj){
-  if (ws && ws.readyState === WebSocket.OPEN) {
-    ws.send(JSON.stringify(obj));
-    return;
-  }
-  httpAction(obj).catch(err => toast(err.message || "Request failed"));
-}
-
-function renderWatchlist(){
-  $("watchlist").innerHTML = state.market.map(s=>{
-    const cls=s.change>0?"up":s.change<0?"down":"flat";
-    return `<button class="watch-row" data-symbol="${s.symbol}" style="width:100%;background:none;border:0;color:inherit;text-align:left">
-      <span><span class="sym">${s.symbol}</span><span class="name">${s.name}</span></span>
-      <span class="px"><span>${money(s.price)}</span><span class="${cls}">${s.changePct>=0?"+":""}${s.changePct}%</span></span>
-    </button>`;
-  }).join("");
-  document.querySelectorAll(".watch-row").forEach(b=>b.onclick=()=>selectSymbol(b.dataset.symbol));
-}
-
-function renderHeader(){
-  if(!state.player)return;
-  $("cash").textContent=money(state.player.cash);
-  $("portfolio").textContent=money(state.player.portfolioValue);
-  $("level").textContent=state.player.level;
-  $("nameBtn").textContent=state.player.name;
-  $("online").textContent=state.online+" online";
-}
-
-function populateSymbols(){
-  $("symbol").innerHTML=state.market.map(s=>`<option value="${s.symbol}">${s.symbol} — ${s.name}</option>`).join("");
-  $("symbol").value=state.selected;
-}
-function selectedStock(){ return state.market.find(s=>s.symbol===state.selected); }
-function formatExpiration(ts){return new Date(ts).toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"});}
-const greek=n=>Number.isFinite(Number(n))?Number(n).toFixed(3):"—";
-function daysToExpiration(ts){return Math.max(0,Math.ceil((ts-Date.now())/86400000));}
-function renderExpirationDates(){const ex=[...new Set(state.options.map(o=>o.expiration))].sort((a,b)=>a-b);expirationEl.innerHTML=ex.map((ts,i)=>`<button class="expiration-btn ${i===0?"active":""}" data-exp="${ts}"><b>${formatExpiration(ts)}</b><small>${daysToExpiration(ts)} days</small></button>`).join("");expirationEl.querySelectorAll(".expiration-btn").forEach(b=>b.onclick=()=>{expirationEl.querySelectorAll(".expiration-btn").forEach(x=>x.classList.remove("active"));b.classList.add("active");renderOptionChain(Number(b.dataset.exp));});if(ex.length)renderOptionChain(ex[0]);}
-function renderOptionChain(expiration){
-  const rows=state.options.filter(o=>!expiration||o.expiration===expiration).sort((a,b)=>a.strike-b.strike);
-  if(!rows.length){chainEl.innerHTML='<div class="chain-loading">No option contracts available.</div>';return;}
-  const strikes=[...new Set(rows.map(o=>o.strike))], spot=Number(selectedStock()?.price);
-  const fmt=n=>Number.isFinite(Number(n))?Number(n).toFixed(2):"—";
-  const cls=n=>Number(n)>0?"positive":Number(n)<0?"negative":"muted";
-  const selectedExp=expiration||rows[0].expiration, expLabel=formatExpiration(selectedExp);
-  const htmlRows=strikes.map(k=>{
-    const c=rows.find(o=>o.strike===k&&o.type==="call"), p=rows.find(o=>o.strike===k&&o.type==="put");
-    const atm=Math.abs(spot-k)<Math.max(1,spot*.0125);
-    const call=c?[
-      `<td class="call-cell" data-contract="${c.id}">${fmt(c.last ?? c.mid)}</td>`,
-      `<td class="call-cell" data-contract="${c.id}">${fmt(c.bid)}</td>`,
-      `<td class="call-cell" data-contract="${c.id}">${fmt(c.ask)}</td>`,
-      `<td class="call-cell ${cls(c.delta)}" data-contract="${c.id}">${greek(c.delta)}</td>`,
-      `<td class="call-cell muted" data-contract="${c.id}">${c.volume == null ? "—" : c.volume}</td>`,
-      `<td class="call-cell muted" data-contract="${c.id}">${c.openInterest == null ? "—" : c.openInterest}</td>`
-    ].join(""):'<td colspan="6" class="muted">—</td>';
-    const put=p?[
-      `<td class="put-cell ${cls(p.delta)}" data-contract="${p.id}">${greek(p.delta)}</td>`,
-      `<td class="put-cell muted" data-contract="${p.id}">${p.volume == null ? "—" : p.volume}</td>`,
-      `<td class="put-cell muted" data-contract="${p.id}">${p.openInterest == null ? "—" : p.openInterest}</td>`,
-      `<td class="put-cell" data-contract="${p.id}">${fmt(p.bid)}</td>`,
-      `<td class="put-cell" data-contract="${p.id}">${fmt(p.ask)}</td>`,
-      `<td class="put-cell" data-contract="${p.id}">${fmt(p.last ?? p.mid)}</td>`
-    ].join(""):'<td colspan="6" class="muted">—</td>';
-    return `<tr class="${atm?"atm":""}" data-strike="${k}">${call}<td class="strike">${k}</td>${put}</tr>`;
-  }).join("");
-  chainEl.innerHTML=`
-    <div class="chain-table-wrap"><table class="chain-table">
-      <thead><tr><th colspan="7" class="call-group">CALLS · ${expLabel}</th><th class="strike-head">STRIKE</th><th colspan="7" class="put-group">PUTS · ${expLabel}</th></tr>
-      <tr><th>LAST</th><th>BID</th><th>ASK</th><th>DELTA</th><th>VOL</th><th>OPEN INT</th><th class="strike-head">STRIKE</th><th>DELTA</th><th>VOL</th><th>OPEN INT</th><th>BID</th><th>ASK</th><th>LAST</th></tr></thead>
-      <tbody>${htmlRows}</tbody></table></div>
-    <div class="chain-note"><span>Calls left · puts right · live Alpaca quotes update automatically.</span><span>${strikes.length} strikes · ${rows.length} contracts · REAL MARKET DATA</span></div>`;
-  $("chainSpot").textContent=`${state.selected} ${spot?money(spot):"—"}`;
-  chainEl.querySelectorAll("[data-contract]").forEach(cell=>cell.addEventListener("click",()=>selectOptionContract(cell.dataset.contract)));
-}
-function selectOptionContract(id){
-  const index=state.options.findIndex(o=>o.id===id); if(index<0)return;
-  $("contract").value=String(index); const o=state.options[index]; renderOptionInfo();
-  chainEl.querySelectorAll(".chain-selected").forEach(x=>x.classList.remove("chain-selected"));
-  chainEl.querySelectorAll("[data-contract='"+id+"']").forEach(x=>x.classList.add("chain-selected"));
-  $("optionsTab").hidden=false; $("stockTab").hidden=true;
-  document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab==="options"));
-  toast(`${o.symbol} ${o.strike} ${o.type.toUpperCase()} selected · ask ${o.ask == null ? "—" : money(o.ask)}`);
-}
-
-async function loadOptions(){
-  const r=await fetch("/api/options?symbol="+encodeURIComponent(state.selected)+"&_="+Date.now(),{cache:"no-store"});
-  const data=await r.json();
-  if(!r.ok) throw new Error(data.error || "Real option data unavailable");
-  state.options=data.chain||[];
-  optionsLoadedFor=state.selected;
-  renderExpirationDates(); renderOptionChain();
-  $("contract").innerHTML=state.options.map((o,i)=>`<option value="${i}">${o.type.toUpperCase()} ${o.strike} · ${formatExpiration(o.expiration)} · ask ${o.ask == null ? "—" : money(o.ask)}</option>`).join("");
-  renderOptionInfo();
-}
-
-function renderOptionInfo(){const o=state.options[Number($("contract").value)||0];if(!o){$("greeks").textContent="No option chain";return;}$("greeks").innerHTML=`EXP ${formatExpiration(o.expiration)} · ${daysToExpiration(o.expiration)} days<br>Δ ${greek(o.delta)} · Γ ${greek(o.gamma)}<br>Θ ${greek(o.theta)} · Vega ${greek(o.vega)}<br>100 shares/contract · REAL ALPACA DATA`;}
-function selectSymbol(sym){
-  const symbolChanged = state.selected !== sym;
-  state.selected=sym;
-  if(chainSymbolEl) chainSymbolEl.textContent=sym;
-  $("symbol").value=sym;
-  const s=selectedStock();
-  if(!s){
-    $("quote").innerHTML="<div class=\"quote-price\">Waiting for market data…</div>";
-    return;
-  }
-  const cls=s.change>0?"up":s.change<0?"down":"flat";
-  const history=Array.isArray(s.history)?s.history.filter(Number.isFinite):[];
-  let chart="";
-  if(history.length>1){
-    const min=Math.min(...history), max=Math.max(...history), span=Math.max(0.0001,max-min);
-    const points=history.map((v,i)=>{
-      const x=(i/(history.length-1))*180;
-      const y=42-((v-min)/span)*36;
-      return x.toFixed(1)+","+y.toFixed(1);
-    }).join(" ");
-    chart=`<svg class="sparkline" viewBox="0 0 180 48" preserveAspectRatio="none" aria-label="Recent real price movement"><polyline points="${points}" fill="none" stroke="currentColor" stroke-width="2"/></svg>`;
-  }
-  const updated=s.lastTradeAt?new Date(s.lastTradeAt).toLocaleTimeString():"waiting";
-  const changeText=s.change==null?"—":`${s.change>=0?"+":""}${money(s.change)} (${s.changePct>=0?"+":""}${s.changePct}%)`;
-  $("quote").innerHTML=`<div class="quote-price">${s.price==null?"Waiting for real quote…":money(s.price)}</div><div class="quote-change ${cls}">${changeText}</div>${chart}<div class="quote-meta">REAL MARKET DATA · updated ${updated}</div>`;
-  if (symbolChanged || optionsLoadedFor !== sym) loadOptions().catch(err => console.error("Options chain load failed:", err));
-}
-
-function pxRect(x,y,w,h,fill,stroke){
-  ctx.fillStyle=fill;ctx.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h));
-  if(stroke){ctx.strokeStyle=stroke;ctx.strokeRect(Math.round(x)+.5,Math.round(y)+.5,Math.round(w)-1,Math.round(h)-1);}
-}
-function sidewalk(x,y,w,h){
-  pxRect(x,y,w,h,"#aebbd0","#8191aa");
-  ctx.fillStyle="#c5d0df";
-  for(let yy=y+8;yy<y+h;yy+=18) ctx.fillRect(x+4,yy,w-8,2);
-}
-function road(x,y,w,h){
-  pxRect(x,y,w,h,"#344c63","#253b51");
-  ctx.fillStyle="#7890a5";
-  if(w>h){
-    for(let xx=x+12;xx<x+w;xx+=46) ctx.fillRect(xx,y+h/2-2,24,4);
-  }else{
-    for(let yy=y+12;yy<y+h;yy+=46) ctx.fillRect(x+w/2-2,yy,4,24);
-  }
-}
-function windowTile(x,y,w=22,h=18){
-  pxRect(x,y,w,h,"#78b9dd","#405e80");
-  pxRect(x+3,y+3,w-6,5,"#a9def0");
-  pxRect(x+3,y+h-7,w-6,3,"#4c83aa");
-}
-function tree(x,y,scale=1){
-  ctx.save();ctx.translate(x,y);ctx.scale(scale,scale);
-  ctx.fillStyle="#775d45";ctx.fillRect(-3,7,6,14);
-  ctx.fillStyle="#3f7f55";ctx.beginPath();ctx.arc(0,2,15,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle="#67a866";ctx.beginPath();ctx.arc(-7,-4,9,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle="#83ba70";ctx.fillRect(-8,-11,7,5);
-  ctx.restore();
-}
-function car(x,y,body,vertical=false){
-  ctx.save();ctx.translate(x,y);
-  if(vertical) ctx.rotate(Math.PI/2);
-  pxRect(-10,-18,20,36,body,"#31465c");
-  pxRect(-7,-11,14,9,"#b5d8e7");
-  pxRect(-7,3,14,8,"#8fb9cf");
-  ctx.fillStyle="#dbe7ec";ctx.fillRect(-12,-12,3,7);ctx.fillRect(9,-12,3,7);
-  ctx.restore();
-}
-function flowerBed(x,y,w,h){
-  pxRect(x,y,w,h,"#4d8a59","#6b7c72");
-  for(let xx=x+10;xx<x+w-4;xx+=14){
-    ctx.fillStyle=(xx%2?"#f0b6b2":"#e8d17a");ctx.fillRect(xx,y+8,5,5);
-    ctx.fillStyle="#9fd06d";ctx.fillRect(xx+2,y+13,3,7);
-  }
-}
-function fountain(x,y){
-  ctx.fillStyle="#7088a3";ctx.fillRect(x-32,y-25,64,50);
-  ctx.fillStyle="#d6e1e9";ctx.fillRect(x-24,y-17,48,34);
-  ctx.fillStyle="#67b6dc";ctx.beginPath();ctx.arc(x,y,17,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle="#b5e7f4";ctx.fillRect(x-3,y-24,6,12);ctx.fillRect(x-2,y-12,4,9);
-}
-function drawBuilding(b,i){
-  const palettes=[
-    ["#b8c4d6","#6e7e9b","#3e70b7"],
-    ["#d5dbe3","#74839d","#4d86c7"],
-    ["#c5d0dc","#71829c","#4778b8"],
-    ["#d6dce4","#7d8da5","#4c83bf"]
-  ][i%4];
-  const [wall,roof,accent]=palettes;
-  pxRect(b.x,b.y,b.w,b.h,wall,"#566a86");
-  pxRect(b.x-5,b.y-5,b.w+10,13,roof,"#445773");
-  pxRect(b.x+8,b.y+18,b.w-16,22,accent,"#355779");
-  ctx.fillStyle="#eef2f5";ctx.font="bold 12px monospace";ctx.textAlign="center";
-  ctx.fillText(b.name,b.x+b.w/2,b.y+33);
-  ctx.textAlign="left";
-  const cols=Math.max(3,Math.floor((b.w-30)/34));
-  for(let row=0;row<3;row++){
-    for(let col=0;col<cols;col++){
-      const wx=b.x+16+col*34, wy=b.y+54+row*30;
-      windowTile(wx,wy,23,19);
-    }
-  }
-  pxRect(b.x+b.w/2-19,b.y+b.h-44,38,44,"#7d5948","#4d4650");
-  pxRect(b.x+b.w/2-13,b.y+b.h-38,26,6,"#8dbddd");
-  ctx.fillStyle="#cfd8e2";ctx.fillRect(b.x+10,b.y+b.h-8,b.w-20,4);
-}
-function drawCity(){}
-function drawPlayer(p,me){
-  ctx.save();ctx.translate(p.x,p.y);
-  ctx.fillStyle="#0008";ctx.beginPath();ctx.ellipse(0,13,12,5,0,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle=me?"#27b3ff":"#d16cff";ctx.beginPath();ctx.arc(0,-4,9,0,Math.PI*2);ctx.fill();
-  ctx.fillStyle="#f1f6ff";ctx.font="10px system-ui";ctx.textAlign="center";ctx.fillText(p.name,0,-18);
-  ctx.restore();
-}
-
-function loop(){requestAnimationFrame(loop);}
-window.addEventListener("keydown",e=>{
-  if(["INPUT","SELECT","TEXTAREA"].includes(document.activeElement?.tagName))return;
-  keys.add(e.key);
-  if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key))e.preventDefault();
-  if(keys.size)moveTarget=null;
-});
-window.addEventListener("keyup",e=>keys.delete(e.key));
-
-ws.addEventListener("open",()=>{
-  let saved=localStorage.getItem("marketCityName");
-  if(!saved) saved="Trader";
-  send({type:"hello",name:saved,playerId});
-});
-ws.addEventListener("message",e=>{
-  const msg=JSON.parse(e.data);
-  if(msg.type==="state"){
-    state.player=msg.player;state.market=msg.market;state.leaderboard=msg.leaderboard;state.online=msg.online;
-    populateSymbols();renderWatchlist();renderHeader();selectSymbol(state.selected);drawCity();
-  } else if(msg.type==="market"){
-    state.market=msg.market;state.leaderboard=msg.leaderboard;state.online=msg.online;
-    renderWatchlist();renderHeader();selectSymbol(state.selected);
-  } else if(msg.type==="optionTick") {
-    const o=state.options.find(x=>x.contractSymbol===msg.contractSymbol);
-    if(o){
-      if(msg.bid!=null)o.bid=msg.bid;
-      if(msg.ask!=null)o.ask=msg.ask;
-      if(msg.last!=null)o.last=msg.last;
-      o.mid=Number.isFinite(Number(o.bid))&&Number.isFinite(Number(o.ask))?(Number(o.bid)+Number(o.ask))/2:null;
-      o.updatedAt=msg.updatedAt;
-      const active=document.querySelector(".expiration-btn.active");
-      renderOptionChain(active?Number(active.dataset.exp):undefined);
-      renderOptionInfo();
-    }
-  } else if(msg.type==="players"){
-    state.others=msg.players;
-  } else if(msg.type==="error"){
-    toast(msg.message);
-  }
-});
-
-$("symbol").onchange=e=>selectSymbol(e.target.value);
-$("chainRefresh").onclick=()=>{ optionsLoadedFor=""; loadOptions().then(()=>toast("Options chain refreshed")).catch(()=>toast("Unable to refresh options chain")); };
-$("contract").onchange=renderOptionInfo;
-$("buyStock").onclick=()=>send({type:"stockOrder",symbol:state.selected,side:"buy",quantity:Number($("shares").value)});
-$("sellStock").onclick=()=>send({type:"stockOrder",symbol:state.selected,side:"sell",quantity:Number($("shares").value)});
-$("buyOption").onclick=()=>{
-  const o=state.options[Number($("contract").value)||0];
-  if(o)send({type:"optionOrder",symbol:o.symbol,type:o.type,strike:o.strike,contractSymbol:o.contractSymbol,quantity:Number($("contracts").value)});
-};
-$("nameBtn").onclick=()=>{
-  const name=prompt("Choose your trader name:",state.player?.name||"Trader");
-  if(name&&name.trim()){localStorage.setItem("marketCityName",name.trim());send({type:"hello",name:name.trim()})}
-};
-
-document.querySelectorAll(".tab").forEach(btn=>btn.onclick=()=>{
-  document.querySelectorAll(".tab").forEach(x=>x.classList.remove("active"));btn.classList.add("active");
-  $("stockTab").hidden=btn.dataset.tab!=="stock";$("optionsTab").hidden=btn.dataset.tab!=="options";
-  if(btn.dataset.tab==="options")loadOptions();
-});
-const drawer=$("drawer");
-function openDrawer(title,html){$("drawerTitle").textContent=title;$("drawerContent").innerHTML=html;drawer.classList.remove("hidden")}
-$("closeDrawer").onclick=()=>drawer.classList.add("hidden");
-document.querySelectorAll(".menu-btn").forEach(btn=>btn.onclick=()=>{
-  document.querySelectorAll(".menu-btn").forEach(x=>x.classList.remove("active"));btn.classList.add("active");
-  const s=btn.dataset.screen;
-  if(s==="city"){drawer.classList.add("hidden");return}
-  if(s==="portfolio"){
-    const pos=Object.entries(state.player?.positions||{}).map(([sym,q])=>{const st=state.market.find(x=>x.symbol===sym);return `<tr><td>${sym}</td><td>${q}</td><td>${money(st?.price)}</td><td>${money((st?.price||0)*q)}</td></tr>`}).join("");
-    const opts=(state.player?.options||[]).map(o=>`<tr><td>${o.symbol}</td><td>${o.type.toUpperCase()}</td><td>${o.strike}</td><td>${o.quantity}</td><td>${money(o.marketPrice*100*o.quantity)}</td></tr>`).join("");
-    openDrawer("Portfolio",`<table class="table"><thead><tr><th>STOCK</th><th>SHARES</th><th>PRICE</th><th>VALUE</th></tr></thead><tbody>${pos||"<tr><td colspan=4>No stock positions yet.</td></tr>"}</tbody></table><h3 style="padding:12px">Options</h3><table class="table"><thead><tr><th>SYMBOL</th><th>TYPE</th><th>STRIKE</th><th>QTY</th><th>VALUE</th></tr></thead><tbody>${opts||"<tr><td colspan=5>No option positions yet.</td></tr>"}</tbody></table>`);
-  } else if(s==="news"){
-    openDrawer("News Center",`<div class="news-item"><b>Market City Wire</b><span>Stock quotes and recent price movement are pulled from live market data. Quotes may be delayed depending on the upstream data feed.</span></div><div class="news-item"><b>Trading Desk</b><span>Watch price movement, compare companies, and practice position sizing without risking real money.</span></div><div class="news-item"><b>Options Brief</b><span>Calls benefit from rising underlying prices; puts benefit from falling prices. Premiums are simulated from volatility and time to expiration.</span></div>`);
-  } else if(s==="missions"){
-    const m=state.player?.missions||{};
-    openDrawer("Missions",`<div class="mission"><span>Complete your first trade</span><b class="${m.firstTrade?"done":""}">${m.firstTrade?"DONE":"+100 XP"}</b></div><div class="mission"><span>Tour Market City</span><b class="${m.cityTour?"done":""}">${m.cityTour?"DONE":"+100 XP"}</b></div><div class="mission"><span>Grow portfolio to $110,000</span><b class="${m.profitGoal?"done":""}">${m.profitGoal?"DONE":"+500 XP"}</b></div>`);
-  } else if(s==="leaderboard"){
-    openDrawer("Leaderboard",`<table class="table"><thead><tr><th>#</th><th>TRADER</th><th>PORTFOLIO</th><th>LEVEL</th></tr></thead><tbody>${(state.leaderboard||[]).map((p,i)=>`<tr><td>${i+1}</td><td>${p.name}</td><td>${money(p.value)}</td><td>${p.level}</td></tr>`).join("")}</tbody></table>`);
-  }
-});
-
-drawCity();
-
-startHttpMarketFallback();
-
-loadOptions().catch(err => {
-  console.error("Market City option chain failed:", err);
-  $("greeks").textContent = "Options unavailable until the server connection is ready.";
-});
-
+function apply(m){if(m.player)state.player=m.player;if(m.market)state.market=m.market;if(m.leaderboard)state.leaderboard=m.leaderboard;if(Number.isFinite(m.online))state.online=m.online;if(typeof m.marketReady==="boolean")state.marketReady=m.marketReady;renderAll()}
+async function bootstrap(){try{apply(await api("/api/bootstrap?playerId="+encodeURIComponent(playerId)+"&_="+Date.now()));connect();await loadExpirations()}catch(e){toast(e.message);setTimeout(bootstrap,4000)}}
+function stock(){return state.market.find(x=>x.symbol===state.selected)}
+function populate(){const s=$("symbol");s.innerHTML=state.market.map(x=>'<option value="'+esc(x.symbol)+'">'+esc(x.symbol)+" — "+esc(x.name)+"</option>").join("");s.value=state.selected}
+function renderHeader(){const p=state.player;if(!p)return;$("cash").textContent=money(p.cash);$("portfolio").textContent=money(p.portfolioValue);$("level").textContent=p.level}
+function renderWatchlist(){$("watchlist").innerHTML=state.market.map(s=>{const c=s.changePct>0?"up":s.changePct<0?"down":"flat";return '<button class="watch-row '+(s.symbol===state.selected?"active":"")+'" data-symbol="'+esc(s.symbol)+'"><span><span class="sym">'+esc(s.symbol)+'</span><span class="name">'+esc(s.name)+'</span></span><span class="px"><span class="price">'+px(s.price)+'</span><span class="'+c+'">'+(s.changePct==null?"—":(s.changePct>=0?"+":"")+Number(s.changePct).toFixed(2)+"%")+'</span></span></button>'}).join("");document.querySelectorAll(".watch-row").forEach(b=>b.onclick=()=>selectSymbol(b.dataset.symbol))}
+function renderQuote(){const s=stock();if(!s)return;$("selectedSymbol").textContent=s.symbol;$("selectedName").textContent=s.name;$("selectedPrice").textContent=px(s.price);$("bid").textContent=px(s.bid);$("ask").textContent=px(s.ask);$("change").textContent=s.change==null?"—":px(s.change)+" "+(s.changePct>=0?"+":"")+Number(s.changePct||0).toFixed(2)+"%";$("change").className=s.change>0?"up":s.change<0?"down":"";$("prevClose").textContent=px(s.previousClose);$("feed").textContent=s.stream?"IEX STREAM":"IEX SNAPSHOT";$("optionSource").textContent="Alpaca "+(s.stream?"live stream":"latest snapshot")+" · real data"}
+function renderChart(){const c=$("priceChart"),ctx=c.getContext("2d"),d=devicePixelRatio||1,r=c.getBoundingClientRect(),w=Math.max(300,r.width),h=Math.max(100,r.height);c.width=w*d;c.height=h*d;ctx.setTransform(d,0,0,d,0,0);ctx.clearRect(0,0,w,h);const v=(stock()?.history||[]).filter(Number.isFinite);if(v.length<2){ctx.fillStyle="#62758a";ctx.font="11px sans-serif";ctx.fillText("Waiting for Alpaca price history…",14,28);return}const lo=Math.min(...v),hi=Math.max(...v),range=hi-lo||1,p=18;ctx.strokeStyle="#182737";for(let i=1;i<4;i++){const y=p+i*(h-p*2)/4;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke()}ctx.strokeStyle="#27b5ff";ctx.lineWidth=2;ctx.beginPath();v.forEach((x,i)=>{const xx=p+i*(w-2*p)/Math.max(1,v.length-1),yy=h-p-(x-lo)/range*(h-2*p);i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy)});ctx.stroke()}
+function renderTicket(){const s=stock();$("ticketPrice").textContent=px(s?.price);$("stockPosition").textContent=(state.player?.positions?.[state.selected]||0)+" shares held"}
+async function selectSymbol(s){state.selected=s;state.selectedContract=null;state.expiration="";populate();renderWatchlist();renderQuote();renderChart();renderTicket();await loadExpirations()}
+async function loadExpirations(){try{const m=await api("/api/options/expirations?symbol="+encodeURIComponent(state.selected));state.expirations=m.expirations||[];const e=$("expirationDates");e.innerHTML=state.expirations.map(x=>'<option value="'+esc(x)+'">'+dateLabel(x)+'</option>').join("");if(!state.expirations.length){state.options=[];renderChain();return}state.expiration=state.expirations.includes(state.expiration)?state.expiration:state.expirations[0];e.value=state.expiration;await loadChain()}catch(e){$("chainStatus").textContent="Alpaca expirations unavailable: "+e.message}}
+async function loadChain(){const seq=++chainSeq;$("chainStatus").textContent="Loading real Alpaca quotes, trades and Greeks…";try{const m=await api("/api/options?symbol="+encodeURIComponent(state.selected)+"&expirationDate="+encodeURIComponent(state.expiration));if(seq!==chainSeq)return;state.options=m.chain||[];$("chainStatus").textContent=state.options.length+" real contracts · "+(m.source||"Alpaca")+" · live updates enabled";renderChain();renderOptionTicket()}catch(e){state.options=[];renderChain();$("chainStatus").textContent="Alpaca option chain unavailable: "+e.message}}
+function renderChain(){const calls=new Map(state.options.filter(x=>x.type==="call").map(x=>[x.strike,x])),puts=new Map(state.options.filter(x=>x.type==="put").map(x=>[x.strike,x])),strikes=[...new Set(state.options.map(x=>x.strike))].sort((a,b)=>a-b),spot=stock()?.price;let atm=strikes[0];if(Number.isFinite(spot))for(const s of strikes)if(Math.abs(s-spot)<Math.abs(atm-spot))atm=s;if(!strikes.length){$("optionChain").innerHTML='<div style="padding:28px;color:#687c91">No real contracts returned by Alpaca.</div>';return}
+ const cell=(o,side)=>{if(!o)return '<td>—</td><td>—</td><td>—</td><td>—</td><td>—</td>';const z=state.selectedContract===o.contractSymbol?" selected":"";return '<td class="click '+side+z+'" data-contract="'+esc(o.contractSymbol)+'">'+px(o.last)+'</td><td class="click '+side+z+'" data-contract="'+esc(o.contractSymbol)+'">'+px(o.bid)+'</td><td class="click '+side+z+'" data-contract="'+esc(o.contractSymbol)+'">'+px(o.ask)+'</td><td class="click '+side+z+'" data-contract="'+esc(o.contractSymbol)+'">'+num(o.delta)+'</td><td class="click '+side+z+'" data-contract="'+esc(o.contractSymbol)+'">'+(o.volume==null?"—":Number(o.volume).toLocaleString())+'</td>'};
+ $("optionChain").innerHTML='<table class="chain-table"><thead><tr><th colspan="5" class="call">CALLS · LAST BID ASK DELTA VOL</th><th>STRIKE</th><th colspan="5" class="put">PUTS · LAST BID ASK DELTA VOL</th></tr></thead><tbody>'+strikes.map(s=>'<tr class="'+(s===atm?"atm":"")+'">'+cell(calls.get(s),"call")+'<td class="strike">'+px(s)+'</td>'+cell(puts.get(s),"put")+'</tr>').join("")+'</tbody></table>';document.querySelectorAll("[data-contract]").forEach(e=>e.onclick=()=>selectContract(e.dataset.contract))}
+function selectContract(s){state.selectedContract=state.options.find(x=>x.contractSymbol===s)||null;document.querySelectorAll(".ticket-tabs button").forEach(x=>x.classList.toggle("active",x.dataset.tab==="option"));$("stockTicket").hidden=true;$("optionTicket").hidden=false;renderChain();renderOptionTicket()}
+function renderOptionTicket(){const o=state.selectedContract;if(!o){$("selectedContract").textContent="Select a call or put in the chain.";$("optionDetails").innerHTML="";return}$("selectedContract").innerHTML="<b>"+esc(o.contractSymbol)+"</b><br>Bid "+px(o.bid)+" · Ask "+px(o.ask)+" · Last "+px(o.last);$("optionDetails").innerHTML="Delta "+num(o.delta)+" · Gamma "+num(o.gamma)+" · Theta "+num(o.theta)+" · Vega "+num(o.vega)+"<br>IV "+(o.iv==null?"—":Number(o.iv).toFixed(2)+"%")+" · Volume "+(o.volume==null?"—":Number(o.volume).toLocaleString())+" · OI "+(o.openInterest==null?"—":Number(o.openInterest).toLocaleString())}
+function renderAll(){populate();renderHeader();renderWatchlist();renderQuote();renderChart();renderTicket();renderChain();renderOptionTicket()}
+function orderStock(side){send({type:"stockOrder",symbol:state.selected,side,quantity:Math.floor(Number($("shares").value))})}
+function orderOption(){const o=state.selectedContract;if(!o)return toast("Select an option contract first.");send({type:"optionOrder",symbol:o.symbol,type:o.type,contractSymbol:o.contractSymbol,quantity:Math.floor(Number($("contracts").value)),expirationDate:o.expirationDate})}
+async function drawer(screen){const d=$("drawer"),b=$("drawerContent");d.classList.remove("hidden");$("drawerTitle").textContent=screen.toUpperCase();if(screen==="portfolio"){const p=state.player||{};b.innerHTML='<div class="drawer-body"><h3>Cash '+money(p.cash)+' · Portfolio '+money(p.portfolioValue)+'</h3>'+Object.entries(p.positions||{}).map(([s,q])=>'<div class="holding"><span>'+esc(s)+'</span><b>'+q+' shares</b></div>').join("")+(p.options||[]).map(o=>'<div class="holding"><span>'+esc(o.contractSymbol)+'</span><b>'+o.quantity+' contracts</b></div>').join("")+'</div>'}else if(screen==="news"){b.innerHTML='<div class="drawer-body">Loading Alpaca news…</div>';try{const m=await api("/api/news?symbol="+encodeURIComponent(state.selected));b.innerHTML='<div class="drawer-body">'+(m.news||[]).map(n=>'<div class="news-item"><b>'+esc(n.headline)+'</b><small>'+esc(n.source||"Alpaca")+" · "+new Date(n.createdAt).toLocaleString()+"</small><p>"+esc(n.summary||"")+'</p></div>').join("")+"</div>"}catch(e){b.innerHTML='<div class="drawer-body">'+esc(e.message)+"</div>"}}else if(screen==="missions"){const m=state.player?.missions||{};b.innerHTML='<div class="drawer-body">'+[["firstTrade","Complete your first trade"],["cityTour","Explore Market City"],["profitGoal","Reach $110,000 portfolio value"]].map(x=>'<div class="mission"><span>'+x[1]+'</span><b>'+(m[x[0]]?"DONE":"OPEN")+"</b></div>").join("")+"</div>"}else{b.innerHTML='<div class="drawer-body">'+(state.leaderboard||[]).map((x,i)=>'<div class="holding"><span>#'+(i+1)+" "+esc(x.name)+" · Level "+x.level+"</span><b>"+money(x.value)+"</b></div>").join("")+"</div>"}}
+$("symbol").onchange=e=>selectSymbol(e.target.value);$("expirationDates").onchange=e=>{state.expiration=e.target.value;loadChain()};$("refreshOptions").onclick=loadChain;$("buyStock").onclick=()=>orderStock("buy");$("sellStock").onclick=()=>orderStock("sell");$("buyOption").onclick=orderOption;$("closeDrawer").onclick=()=>$("drawer").classList.add("hidden");
+document.querySelectorAll(".ticket-tabs button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".ticket-tabs button").forEach(x=>x.classList.toggle("active",x===b));$("stockTicket").hidden=b.dataset.tab!=="stock";$("optionTicket").hidden=b.dataset.tab!=="option"});
+document.querySelectorAll(".bottom-nav button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".bottom-nav button").forEach(x=>x.classList.toggle("active",x===b));drawer(b.dataset.screen)});
+$("nameBtn").onclick=()=>{const n=window.prompt("Trader name",state.player?.name||"Trader");if(n)send({type:"hello",name:n})};window.addEventListener("resize",renderChart);bootstrap();
