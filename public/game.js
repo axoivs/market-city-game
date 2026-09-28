@@ -73,7 +73,9 @@ function radarStockRow(x){
   return '<button class="radar-row radar-click" data-symbol="'+esc(x.symbol)+'"><span><b>'+esc(x.symbol)+'</b><small>'+money(x.price)+'</small></span><span class="radar-right"><b class="'+cls+'">'+(x.changePct>=0?"+":"")+Number(x.changePct||0).toFixed(2)+'%</b><small>'+x.trend+' · '+x.trendScore+'</small></span></button>';
 }
 function radarSetupRow(x){
-  return '<button class="radar-row radar-click" data-symbol="'+esc(x.symbol)+'"><span><b>'+esc(x.symbol)+'</b><small>'+esc(x.contractSymbol)+'</small></span><span class="radar-right"><b>'+money(x.ask)+'</b><small>'+esc(x.type)+' · '+(x.days??"—")+'d · score '+(x.setupScore??"—")+'</small></span></button>';
+  const observed=x.ask!=null?x.ask:x.observedPrice!=null?x.observedPrice:x.last;
+  const label=x.ask!=null?"ASK":"LAST";
+  return '<button class="radar-row radar-click" data-symbol="'+esc(x.symbol)+'"><span><b>'+esc(x.symbol)+'</b><small>'+esc(x.contractSymbol)+'</small></span><span class="radar-right"><b>'+money(observed)+'</b><small>'+label+' · '+esc(x.type)+' · '+(x.days??"—")+'d · score '+(x.setupScore??"—")+'</small></span></button>';
 }
 async function openRadar(){
   const d=$("drawer"),b=$("drawerContent");
