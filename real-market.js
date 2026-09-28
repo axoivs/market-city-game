@@ -383,6 +383,7 @@ const radarCache = { data: null, at: 0 };
 
 const RADAR_BATCH_SIZE = 100;
 const RADAR_OPTION_TARGETS = 12;
+const RADAR_OPTION_CONCURRENCY = 3;
 const RADAR_CONCURRENCY = 2;
 
 function clamp(n,min,max){return Math.max(min,Math.min(max,n));}
@@ -609,9 +610,13 @@ async function getRadar() {
 
   const setups = [];
   const bigActivity = [];
+  let optionCursor = 0;
 
-  for (const row of optionTargets) {
-    try {
+  async function optionWorker() {
+    while (true) {
+      const row = optionTargets[optionCursor++];
+      if (!row) return;
+      try {
       const expirations = await getExpirations(row.symbol);
       const expiration = expirations.find(d => {
         const days = (Date.parse(d + "T23:59:59-04:00") - Date.now()) / 86400000;
@@ -622,7 +627,12 @@ async function getRadar() {
       const chain = await getOptionChain(row.symbol, expiration);
       const direction = row.trend === "DOWN" ? "put" : "call";
       const candidates = chain.chain.filter(o => {
-        if (o.type !== direction || !finite(o.ask) || o.ask <= 0) return false;
+        if (o.type !== direction) return false;
+        // Prefer the real current ask. Outside regular hours Alpaca may have
+        // no live ask, so allow the latest real trade as an observed fallback.
+        const observedPrice = finite(o.ask) && o.ask > 0 ? o.ask :
+          (finite(o.last) && o.last > 0 ? o.last : null);
+        if (!finite(observedPrice) || observedPrice <= 0) return false;
         if (!finite(o.strike) || !finite(row.price) || row.price <= 0) return false;
         const moneyness = Math.abs(o.strike - row.price) / row.price;
         const delta = Math.abs(Number(o.delta));
@@ -631,6 +641,8 @@ async function getRadar() {
       });
 
       const scored = candidates.map(o => {
+        const observedPrice = finite(o.ask) && o.ask > 0 ? o.ask :
+          (finite(o.last) && o.last > 0 ? o.last : null);
         const spread = finite(o.bid) && o.bid > 0 && finite(o.ask)
           ? (o.ask - o.bid) / o.ask : 1;
         const liquidity = Math.min(
@@ -650,8 +662,8 @@ async function getRadar() {
           (1 - Math.min(1, spread)) * 100 * 0.15,
           0, 100
         );
-        const notional = finite(o.ask)
-          ? o.ask * (o.size || 100) * (o.volume || 0) : 0;
+        const notional = finite(observedPrice)
+          ? observedPrice * (o.size || 100) * (o.volume || 0) : 0;
 
         if (notional >= 100000) bigActivity.push({
           symbol: row.symbol,
@@ -668,6 +680,7 @@ async function getRadar() {
           ...o,
           setupScore: round(score, 1),
           spreadPct: round(spread * 100, 2),
+          observedPrice: round(observedPrice, 2),
           direction: direction.toUpperCase()
         };
       }).sort((a,b) => b.setupScore - a.setupScore);
@@ -686,7 +699,9 @@ async function getRadar() {
           expirationDate: o.expirationDate,
           days: o.days,
           ask: o.ask,
+          last: o.last,
           bid: o.bid,
+          observedPrice: o.observedPrice,
           iv: o.iv,
           delta: o.delta,
           volume: o.volume,
@@ -700,10 +715,15 @@ async function getRadar() {
               : "Mixed trend + liquid near-ATM option setup"
         });
       }
-    } catch (e) {
-      console.error("Radar option scan", row.symbol, e.message);
+      } catch (e) {
+        console.error("Radar option scan", row.symbol, e.message);
+      }
     }
   }
+
+  await Promise.all(
+    Array.from({length: Math.min(RADAR_OPTION_CONCURRENCY, optionTargets.length)}, optionWorker)
+  );
 
   const result = {
     updatedAt: Date.now(),
