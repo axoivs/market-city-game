@@ -6,7 +6,7 @@ function fetchQuote(symbol) {
   return new Promise((resolve, reject) => {
     const req = https.get({
       hostname: HOST,
-      path: "/v8/finance/chart/" + encodeURIComponent(symbol) + "?interval=1m&range=1d",
+      path: "/v8/finance/chart/" + encodeURIComponent(symbol) + "?interval=1m&range=1d&_=" + Date.now(),
       headers: { "User-Agent": "Market-City/1.0" }
     }, res => {
       let body = "";
@@ -43,7 +43,8 @@ async function refreshMarket(market, symbols, round) {
       if (Number.isFinite(open)) stock.open = round(open);
       stock.change = stock.previousClose == null ? null : round(stock.price - stock.previousClose);
       stock.changePct = stock.previousClose ? round((stock.change / stock.previousClose) * 100, 2) : null;
-      stock.lastTradeAt = Number(meta.regularMarketTime) * 1000 || Date.now();
+      stock.lastTradeAt = Date.now();
+      stock.realQuoteTime = Number(meta.regularMarketTime) * 1000 || Date.now();
 
       const closes = result.indicators?.quote?.[0]?.close || [];
       stock.history = closes
