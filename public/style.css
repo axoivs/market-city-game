@@ -16,3 +16,6 @@
 .account-actions button{border-radius:5px;padding:10px;font-weight:900;font-size:10px}
 .account-logout{margin-top:10px;width:100%}
 .account-status{min-height:18px;margin-top:10px;color:#7e93a9;font-size:9px;line-height:1.5}
+
+/* Analytics navigation */
+.bottom-nav{overflow-x:auto;white-space:nowrap;justify-content:flex-start;padding:0 6px;scrollbar-width:none}.bottom-nav::-webkit-scrollbar{display:none}.bottom-nav button{flex:0 0 auto;padding:0 13px}.radar-row{min-height:48px}.radar-row small{max-width:280px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}@media(max-width:800px){.bottom-nav{justify-content:flex-start}.bottom-nav button{padding:0 10px;font-size:8px}.drawer{left:6px;right:6px}.radar-row{padding:9px}.radar-right{max-width:52%;overflow:hidden}.radar-right small{max-width:100%}}
