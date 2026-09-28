@@ -27,7 +27,7 @@ function apply(m){if(m.player)state.player=m.player;if(m.market)state.market=m.m
 async function bootstrap(){try{apply(await api("/api/bootstrap?playerId="+encodeURIComponent(playerId)+"&_="+Date.now()));try{const a=await api("/api/assets");state.assets=a.assets||[]}catch(e){console.error("Alpaca asset universe:",e.message)}populate();renderWatchlist();renderQuote();renderChart();renderTicket();connect();await loadExpirations()}catch(e){toast(e.message);setTimeout(bootstrap,4000)}}
 function stock(){return state.market.find(x=>x.symbol===state.selected)}
 function populate(){const s=$("symbol");const q=String($("tickerSearch")?.value||"").trim().toLowerCase();const list=(state.assets.length?state.assets:state.market).filter(x=>!q||x.symbol.toLowerCase().includes(q)||String(x.name||"").toLowerCase().includes(q));s.innerHTML=list.map(x=>'<option value="'+esc(x.symbol)+'">'+esc(x.symbol)+" — "+esc(x.name)+"</option>").join("");s.value=state.selected}
-function renderHeader(){const p=state.player;if(!p)return;$("cash").textContent=money(p.cash);$("portfolio").textContent=money(p.portfolioValue);$("level").textContent=p.level}
+function renderHeader(){const p=state.player;if(!p)return;$("cash").textContent=money(p.cash);$("portfolio").textContent=money(p.portfolioValue);$("level").textContent=p.level;$("nameBtn").textContent=p.name||"GUEST"}
 function renderWatchlist(){
   $("watchlist").innerHTML=state.market.map(s=>{
     const c=s.changePct>0?"up":s.changePct<0?"down":"flat";
