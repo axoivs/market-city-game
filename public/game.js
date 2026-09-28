@@ -1,5 +1,6 @@
-const canvas = document.getElementById("game");
-const ctx = canvas.getContext("2d");
+const chainEl = document.getElementById("optionChain");
+const expirationEl = document.getElementById("expirationDates");
+const chainSymbolEl = document.getElementById("chainSymbol");
 let playerId = localStorage.getItem("marketCityPlayerId");
 if (!playerId) {
   if (globalThis.crypto?.randomUUID) {
@@ -63,21 +64,16 @@ function populateSymbols(){
   $("symbol").value=state.selected;
 }
 function selectedStock(){ return state.market.find(s=>s.symbol===state.selected); }
+function formatExpiration(ts){return new Date(ts).toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"});}
+function daysToExpiration(ts){return Math.max(0,Math.ceil((ts-Date.now())/86400000));}
+function renderExpirationDates(){const ex=[...new Set(state.options.map(o=>o.expiration))].sort((a,b)=>a-b);expirationEl.innerHTML=ex.map((ts,i)=>`<button class="expiration-btn ${i===0?"active":""}" data-exp="${ts}"><b>${formatExpiration(ts)}</b><small>${daysToExpiration(ts)} days</small></button>`).join("");expirationEl.querySelectorAll(".expiration-btn").forEach(b=>b.onclick=()=>{expirationEl.querySelectorAll(".expiration-btn").forEach(x=>x.classList.remove("active"));b.classList.add("active");renderOptionChain(Number(b.dataset.exp));});}
+function renderOptionChain(expiration){const rows=state.options.filter(o=>!expiration||o.expiration===expiration).sort((a,b)=>a.strike-b.strike);if(!rows.length){chainEl.innerHTML='<div class="chain-loading">No option contracts available.</div>';return;}const strikes=[...new Set(rows.map(o=>o.strike))];const spot=Number(selectedStock()?.price);chainEl.innerHTML=`<div class="chain-toolbar"><span>CALLS</span><strong>${state.selected}</strong><span>PUTS</span></div><div class="chain-table-wrap"><table class="chain-table"><thead><tr><th>LAST</th><th>BID</th><th>ASK</th><th>IV</th><th>DELTA</th><th class="strike-head">STRIKE</th><th>DELTA</th><th>IV</th><th>BID</th><th>ASK</th><th>LAST</th></tr></thead><tbody>${strikes.map(k=>{const c=rows.find(o=>o.strike===k&&o.type==="call"),p=rows.find(o=>o.strike===k&&o.type==="put"),atm=Math.abs(spot-k)<Math.max(1,spot*.025);return `<tr class="${atm?"atm":""}"><td>${money(c?.mid)}</td><td>${money(c?.bid)}</td><td>${money(c?.ask)}</td><td>${c?.iv??"—"}%</td><td>${c?.delta??"—"}</td><td class="strike">${k}</td><td>${p?.delta??"—"}</td><td>${p?.iv??"—"}%</td><td>${money(p?.bid)}</td><td>${money(p?.ask)}</td><td>${money(p?.mid)}</td></tr>`}).join("")}</tbody></table></div><div class="chain-note">Calls left · puts right · highlighted rows are near the current stock price. All pricing is virtual.</div>`;}
 
-async function loadOptions(){
-  const r=await fetch("/api/options?symbol="+encodeURIComponent(state.selected));
-  const data=await r.json();
-  state.options=data.chain||[];
-  $("contract").innerHTML=state.options.map((o,i)=>`<option value="${i}">${o.type.toUpperCase()} ${o.strike} · bid ${money(o.bid)} / ask ${money(o.ask)}</option>`).join("");
-  renderOptionInfo();
-}
-function renderOptionInfo(){
-  const o=state.options[Number($("contract").value)||0];
-  if(!o){$("greeks").textContent="No option chain";return}
-  $("greeks").innerHTML=`IV ${o.iv}% · Δ ${o.delta} · Γ ${o.gamma}<br>Θ ${o.theta} · Vega ${o.vega}<br>30-day virtual contract · 100 shares/contract`;
-}
+async function loadOptions(){const r=await fetch("/api/options?symbol="+encodeURIComponent(state.selected));const data=await r.json();state.options=data.chain||[];renderExpirationDates();renderOptionChain();$("contract").innerHTML=state.options.map((o,i)=>`<option value="${i}">${o.type.toUpperCase()} ${o.strike} · ${formatExpiration(o.expiration)} · ask ${money(o.ask)}</option>`).join("");renderOptionInfo();}
+function renderOptionInfo(){const o=state.options[Number($("contract").value)||0];if(!o){$("greeks").textContent="No option chain";return;}$("greeks").innerHTML=`EXP ${formatExpiration(o.expiration)} · ${daysToExpiration(o.expiration)} days<br>IV ${o.iv}% · Δ ${o.delta} · Γ ${o.gamma}<br>Θ ${o.theta} · Vega ${o.vega}<br>100 shares/contract · virtual pricing`;}
 function selectSymbol(sym){
   state.selected=sym;
+  if(chainSymbolEl) chainSymbolEl.textContent=sym;
   $("symbol").value=sym;
   const s=selectedStock();
   if(!s){
@@ -180,74 +176,7 @@ function drawBuilding(b,i){
   pxRect(b.x+b.w/2-13,b.y+b.h-38,26,6,"#8dbddd");
   ctx.fillStyle="#cfd8e2";ctx.fillRect(b.x+10,b.y+b.h-8,b.w-20,4);
 }
-function drawCity(){
-  ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.imageSmoothingEnabled=false;
-
-  // Warm pastel grass-and-stone city base.
-  pxRect(0,0,canvas.width,canvas.height,"#7189ad");
-  // Main streets and intersections.
-  road(0,270,canvas.width,74);
-  road(0,650,canvas.width,110);
-  road(35,0,88,760);
-  road(1270,0,90,760);
-
-  // Sidewalk ribbons around the neighborhoods.
-  sidewalk(0,246,canvas.width,24);
-  sidewalk(0,344,canvas.width,24);
-  sidewalk(0,620,canvas.width,30);
-  sidewalk(0,0,34,760);
-  sidewalk(123,0,18,760);
-  sidewalk(1252,0,18,760);
-
-  // Crosswalks.
-  for(let x=245;x<360;x+=22) pxRect(x,337,13,7,"#e8edf1");
-  for(let x=880;x<995;x+=22) pxRect(x,337,13,7,"#e8edf1");
-  for(let y=548;y<620;y+=18) pxRect(125, y, 8, 12,"#e8edf1");
-  for(let y=548;y<620;y+=18) pxRect(1258, y, 8, 12,"#e8edf1");
-
-  // Green parks and planted strips.
-  pxRect(0,35,140,190,"#83aa6c","#638b62");
-  pxRect(1000,245,250,105,"#83aa6c","#638b62");
-  pxRect(0,350,140,255,"#7fa66b","#638b62");
-  pxRect(1010,585,245,36,"#80a56b","#638b62");
-  flowerBed(145,585,110,25);
-  flowerBed(705,585,120,25);
-  flowerBed(1015,350,90,22);
-
-  // Paved pedestrian lanes.
-  for(let x=420;x<470;x+=12) pxRect(x,350,8,260,"#8295b1");
-  for(let x=700;x<745;x+=12) pxRect(x,350,8,260,"#8295b1");
-  for(let y=360;y<620;y+=20) pxRect(430,y,30,12,"#91a4bd");
-
-  // City landmarks and street furniture.
-  fountain(1120,510);
-  for(const t of [[62,55],[95,205],[18,415],[112,535],[1030,300],[1205,305],[1280,585],[965,600],[690,610]]) tree(t[0],t[1],1);
-  for(const c of [[205,705,"#ef6f73"],[285,705,"#78a9dc"],[375,705,"#7fca70"],[1145,705,"#ef7d80"],[1215,705,"#7eb5df"]]) car(c[0],c[1],c[2]);
-  car(74,390,"#e96f70",true);car(74,455,"#78a9dc",true);car(74,520,"#7fca70",true);
-  pxRect(315,600,78,12,"#8a634d","#594c48");
-  pxRect(320,604,68,4,"#bd8a63");
-  pxRect(1160,255,68,10,"#8a634d","#594c48");
-
-  // Buildings with the chunky, colorful top-down look from the reference.
-  buildings.forEach(drawBuilding);
-
-  // Foreground plaza accents.
-  flowerBed(425,205,85,24);
-  flowerBed(990,205,100,24);
-  for(const [x,y] of [[430,225],[705,225],[1020,225],[430,580],[705,580],[1020,580]]) {
-    ctx.fillStyle="#c8d5df";ctx.fillRect(x,y,5,5);
-    ctx.fillStyle="#6f8ba0";ctx.fillRect(x+1,y-9,3,9);
-  }
-
-  // Pixel-art title plaque.
-  pxRect(16,14,142,30,"#d4dbe3","#4e6480");
-  pxRect(21,19,132,20,"#5d7698","#3c4d67");
-  ctx.fillStyle="#f2f4f5";ctx.font="bold 12px monospace";ctx.fillText("MARKET CITY",31,33);
-
-  if(state.player) drawPlayer(state.player,true);
-  state.others.forEach(p=>{if(!state.player||p.id!==state.player.id)drawPlayer(p,false)});
-}
+function drawCity(){}
 function drawPlayer(p,me){
   ctx.save();ctx.translate(p.x,p.y);
   ctx.fillStyle="#0008";ctx.beginPath();ctx.ellipse(0,13,12,5,0,0,Math.PI*2);ctx.fill();
@@ -255,83 +184,8 @@ function drawPlayer(p,me){
   ctx.fillStyle="#f1f6ff";ctx.font="10px system-ui";ctx.textAlign="center";ctx.fillText(p.name,0,-18);
   ctx.restore();
 }
-function setMoveTarget(clientX,clientY){
-  const rect=canvas.getBoundingClientRect();
-  if(!rect.width||!rect.height)return false;
 
-  // Canvas is displayed at exactly 100% of the game area.
-  const x=(clientX-rect.left)*(canvas.width/rect.width);
-  const y=(clientY-rect.top)*(canvas.height/rect.height);
-
-  if(x<0||y<0||x>canvas.width||y>canvas.height)return false;
-
-  moveTarget={
-    x:Math.max(25,Math.min(1335,x)),
-    y:Math.max(40,Math.min(755,y))
-  };
-  return true;
-}
-
-function handleMapPointer(e){
-  if(e.button!==undefined && e.button!==0)return;
-  if(!setMoveTarget(e.clientX,e.clientY))return;
-  e.preventDefault();
-  e.stopPropagation();
-  toast("Moving to destination");
-}
-
-// Listen on the whole world container, not just the canvas, so the map remains
-// clickable even when the canvas is resized or another map-layer element is present.
-const worldWrap=document.querySelector(".world-wrap");
-worldWrap.addEventListener("pointerdown",handleMapPointer,{passive:false});
-worldWrap.addEventListener("click",handleMapPointer,{passive:false});
-worldWrap.addEventListener("touchstart",handleMapPointer,{passive:false});
-
-function loop(){
-  if(state.player){
-    let dx=0,dy=0;
-    if(moveTarget){
-      dx=moveTarget.x-state.player.x;
-      dy=moveTarget.y-state.player.y;
-      if(Math.hypot(dx,dy)<4){
-        state.player.x=moveTarget.x;
-        state.player.y=moveTarget.y;
-        moveTarget=null;
-        send({type:"move",x:state.player.x,y:state.player.y});
-      }
-    }
-    if(!moveTarget){
-      if(keys.has("ArrowLeft")||keys.has("a"))dx-=1;
-      if(keys.has("ArrowRight")||keys.has("d"))dx+=1;
-      if(keys.has("ArrowUp")||keys.has("w"))dy-=1;
-      if(keys.has("ArrowDown")||keys.has("s"))dy+=1;
-    }
-    if(dx||dy){
-      const len=Math.hypot(dx,dy)||1;
-      const speed=moveTarget?3.8:3.5;
-      state.player.x=Math.max(25,Math.min(1335,state.player.x+dx/len*speed));
-      state.player.y=Math.max(40,Math.min(755,state.player.y+dy/len*speed));
-      send({type:"move",x:state.player.x,y:state.player.y});
-    }
-  }
-  drawCity();
-  if(moveTarget){
-    ctx.save();
-    ctx.strokeStyle="#fff";
-    ctx.lineWidth=2;
-    ctx.beginPath();
-    ctx.arc(moveTarget.x,moveTarget.y,8,0,Math.PI*2);
-    ctx.stroke();
-    ctx.beginPath();
-    ctx.moveTo(moveTarget.x-12,moveTarget.y);
-    ctx.lineTo(moveTarget.x+12,moveTarget.y);
-    ctx.moveTo(moveTarget.x,moveTarget.y-12);
-    ctx.lineTo(moveTarget.x,moveTarget.y+12);
-    ctx.stroke();
-    ctx.restore();
-  }
-  requestAnimationFrame(loop);
-}
+function loop(){requestAnimationFrame(loop);}
 window.addEventListener("keydown",e=>{
   if(["INPUT","SELECT","TEXTAREA"].includes(document.activeElement?.tagName))return;
   keys.add(e.key);
@@ -399,7 +253,6 @@ document.querySelectorAll(".menu-btn").forEach(btn=>btn.onclick=()=>{
   }
 });
 
-setInterval(()=>{ if(state.player) send({type:"move",x:state.player.x,y:state.player.y}); },1000);
 drawCity();
 
 loadOptions().catch(err => {
@@ -407,4 +260,3 @@ loadOptions().catch(err => {
   $("greeks").textContent = "Options unavailable until the server connection is ready.";
 });
 
-requestAnimationFrame(loop);
