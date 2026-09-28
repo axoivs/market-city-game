@@ -204,85 +204,47 @@ function optionValue(option, spot) {
   return Math.max(0.01, option.type === "call" ? call : put);
 }
 
-function optionGreeks(type, spot, strike, iv, days) {
-  const T = Math.max(0.02, days / 365);
-  const sigma = Math.max(0.08, iv);
-  const r = 0.04;
-  const d1 = (Math.log(spot / strike) + (r + sigma * sigma / 2) * T) / (sigma * Math.sqrt(T));
-  const d2 = d1 - sigma * Math.sqrt(T);
-  const pdf = Math.exp(-0.5 * d1 * d1) / Math.sqrt(2 * Math.PI);
-  const delta = type === "call" ? normalCdf(d1) : normalCdf(d1) - 1;
-  const gamma = pdf / (spot * sigma * Math.sqrt(T));
-  const theta = (-spot * pdf * sigma / (2 * Math.sqrt(T))
-    - (type === "call"
-      ? r * strike * Math.exp(-r * T) * normalCdf(d2)
-      : -r * strike * Math.exp(-r * T) * normalCdf(-d2))) / 365;
-  const vega = spot * pdf * Math.sqrt(T) / 100;
-  return { delta, gamma, theta, vega };
+function normalCdf(x) {
+  return 0.5 * (1 + Math.erf(x / Math.sqrt(2)));
 }
 
-function makeExpirations() {
-  const now = new Date();
-  const out = [];
-  const seen = new Set();
+function normalPdf(x) {
+  return Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
+}
 
-  const add = (date, type) => {
-    const d = new Date(date);
-    d.setHours(16, 0, 0, 0);
-    if (d.getTime() <= Date.now() || seen.has(d.toISOString().slice(0, 10))) return;
-    seen.add(d.toISOString().slice(0, 10));
-    out.push({
-      timestamp: d.getTime(),
-      days: Math.max(1, Math.ceil((d.getTime() - Date.now()) / 86400000)),
-      expirationType: type
-    });
+function optionGreeks(type, spot, strike, ivPercent, days) {
+  const S = Math.max(0.0001, Number(spot));
+  const K = Math.max(0.0001, Number(strike));
+  const sigma = Math.max(0.01, Number(ivPercent));
+  const T = Math.max(1 / 365, Number(days) / 365);
+  const r = 0.04;
+
+  const sqrtT = Math.sqrt(T);
+  const d1 = (Math.log(S / K) + (r + 0.5 * sigma * sigma) * T) / (sigma * sqrtT);
+  const d2 = d1 - sigma * sqrtT;
+  const pdf = normalPdf(d1);
+
+  const callDelta = normalCdf(d1);
+  const putDelta = callDelta - 1;
+  const delta = type === "put" ? putDelta : callDelta;
+
+  const gamma = pdf / (S * sigma * sqrtT);
+  const vega = S * pdf * sqrtT / 100;
+
+  const thetaCall =
+    (-(S * pdf * sigma) / (2 * sqrtT)
+      - r * K * Math.exp(-r * T) * normalCdf(d2)) / 365;
+
+  const thetaPut =
+    (-(S * pdf * sigma) / (2 * sqrtT)
+      + r * K * Math.exp(-r * T) * normalCdf(-d2)) / 365;
+
+  return {
+    delta,
+    gamma,
+    theta: type === "put" ? thetaPut : thetaCall,
+    vega
   };
-
-  // Weekly expirations: next several Friday series.
-  // Some products can also have Monday/Wednesday expirations, so include
-  // the next few business-day short-term series as a simulation.
-  const cursor = new Date(now);
-  for (let i = 0; i < 14; i++) {
-    cursor.setDate(cursor.getDate() + 1);
-    const day = cursor.getDay();
-    if (day === 1 || day === 3 || day === 5) add(cursor, "W");
-  }
-
-  // Standard monthly expirations: third Friday of each month.
-  for (let m = now.getMonth(); m < now.getMonth() + 24; m++) {
-    const d = new Date(now.getFullYear(), m, 1);
-    let fridayCount = 0;
-    for (let day = 1; day <= 31; day++) {
-      const x = new Date(d.getFullYear(), d.getMonth(), day);
-      if (x.getMonth() !== d.getMonth()) break;
-      if (x.getDay() === 5 && ++fridayCount === 3) {
-        add(x, "M");
-        break;
-      }
-    }
-  }
-
-  // Quarterlies: last business day of Mar/Jun/Sep/Dec, up to six quarters.
-  for (let q = 1; q <= 6; q++) {
-    const targetMonth = Math.floor(now.getMonth() / 3) * 3 + q * 3;
-    const last = new Date(now.getFullYear(), targetMonth + 1, 0);
-    while (last.getDay() === 0 || last.getDay() === 6) last.setDate(last.getDate() - 1);
-    add(last, "Q");
-  }
-
-  // LEAPS: long-dated January expirations. The OCC currently lists equity
-  // LEAPS years in advance; include the next four January series.
-  for (let y = now.getFullYear(); y <= now.getFullYear() + 4; y++) {
-    const jan = new Date(y, 0, 1);
-    let thirdFriday = null, count = 0;
-    for (let day = 1; day <= 31; day++) {
-      const x = new Date(y, 0, day);
-      if (x.getDay() === 5 && ++count === 3) { thirdFriday = x; break; }
-    }
-    if (thirdFriday) add(thirdFriday, "L");
-  }
-
-  return out.sort((a, b) => a.timestamp - b.timestamp);
 }
 
 function makeStrikeLadder(spot) {
