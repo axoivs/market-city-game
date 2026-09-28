@@ -215,7 +215,7 @@ function optionGreeks(type, spot, strike, iv, days) {
 
 function makeOptionChain(symbol) {
   const stock = market[symbol];
-  if (!stock) return null;
+  if (!stock || !Number.isFinite(stock.price) || stock.price <= 0) return [];
   const strikes = [-0.10, -0.05, 0, 0.05, 0.10].map(mult => round(stock.price * (1 + mult), 0));
   const expiration = Date.now() + 30 * 86400000;
   const days = 30;
@@ -304,27 +304,54 @@ function tradeStock(player, symbol, side, quantity) {
 }
 
 function tradeOption(player, payload) {
-  const symbol = payload.symbol;
-  const type = payload.type;
+  const symbol = String(payload.symbol || "").toUpperCase();
+  const type = String(payload.type || "").toLowerCase();
   const strike = safeNumber(payload.strike);
   const quantity = Math.floor(safeNumber(payload.quantity, 1));
-  if (!market[symbol] || !["call", "put"].includes(type) || !strike || quantity < 1 || quantity > 100) {
+  const stock = market[symbol];
+
+  if (!stock || !["call", "put"].includes(type) || !Number.isFinite(strike) || strike <= 0 ||
+      quantity < 1 || quantity > 100) {
     throw new Error("Invalid option order");
   }
-  const iv = Math.min(0.80, Math.max(0.18, SYMBOLS[symbol].volatility * 18));
+
+  if (!Number.isFinite(stock.price) || stock.price <= 0) {
+    throw new Error("The live stock price is still loading. Please try again in a few seconds.");
+  }
+
+  // Keep option pricing stable and independent of the old simulated-volatility fields.
+  const iv = 0.30;
   const expiration = Date.now() + 30 * 86400000;
   const temp = { type, symbol, strike, expiration, iv };
-  const mid = optionValue(temp, market[symbol].price);
+  const mid = optionValue(temp, stock.price);
+
+  if (!Number.isFinite(mid) || mid <= 0) {
+    throw new Error("Unable to price this option from the current market quote.");
+  }
+
   const ask = round(mid * 1.04 + 0.02, 2);
   const cost = round(ask * quantity * 100);
-  if (cost > player.cash) throw new Error("Not enough virtual cash");
+
+  if (!Number.isFinite(cost) || cost <= 0) {
+    throw new Error("Unable to calculate the option premium.");
+  }
+  if (cost > player.cash) {
+    throw new Error("Not enough virtual cash for this option order.");
+  }
+
   player.cash -= cost;
   player.options.push({
     id: crypto.randomUUID(),
-    symbol, type, strike, quantity, expiration, iv,
+    symbol,
+    type,
+    strike,
+    quantity,
+    expiration,
+    iv,
     entryPrice: ask,
     marketPrice: ask
   });
+
   completeMission(player, "firstTrade");
   player.updatedAt = Date.now();
   savePlayers();
