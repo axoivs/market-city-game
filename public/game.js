@@ -1,6 +1,11 @@
 const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
-const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host);
+let playerId = localStorage.getItem("marketCityPlayerId");
+if (!playerId) {
+  playerId = crypto.randomUUID();
+  localStorage.setItem("marketCityPlayerId", playerId);
+}
+const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "?playerId=" + encodeURIComponent(playerId));
 const state = { player: null, market: [], others: [], leaderboard: [], online: 0, selected: "AAPL", options: [] };
 const keys = new Set();
 const buildings = [
@@ -118,7 +123,7 @@ window.addEventListener("keyup",e=>keys.delete(e.key));
 ws.addEventListener("open",()=>{
   let saved=localStorage.getItem("marketCityName");
   if(!saved) saved="Trader";
-  send({type:"hello",name:saved});
+  send({type:"hello",name:saved,playerId});
 });
 ws.addEventListener("message",e=>{
   const msg=JSON.parse(e.data);
