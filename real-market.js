@@ -515,8 +515,88 @@ async function getRadar() {
     Array.from({length: Math.min(RADAR_CONCURRENCY, chunks.length)}, worker)
   );
 
-  // Put the strongest real-data movements first. The complete rows array is
-  // retained in the API response; the UI only renders a manageable page.
+  // Snapshot fields can omit the prior daily bar depending on the
+  // symbol/feed. Fetch real 1Day bars in batches so the trend calculation
+  // has an independent historical source.
+  const dailyBars = new Map();
+  const barChunks = [];
+  const pricedSymbols = rows.map(x => x.symbol);
+  for (let i = 0; i < pricedSymbols.length; i += RADAR_BATCH_SIZE) {
+    barChunks.push(pricedSymbols.slice(i, i + RADAR_BATCH_SIZE));
+  }
+
+  cursor = 0;
+  async function barWorker() {
+    while (true) {
+      const index = cursor++;
+      if (index >= barChunks.length) return;
+      const batch = barChunks[index];
+      try {
+        const data = await request(
+          DATA_HOST,
+          "/v2/stocks/bars?symbols=" + encodeURIComponent(batch.join(",")) +
+          "&timeframe=1Day&limit=5&feed=" + encodeURIComponent(STOCK_FEED) +
+          "&adjustment=raw"
+        );
+        const bmap = data?.bars || {};
+        for (const symbol of batch) {
+          const bars = Array.isArray(bmap[symbol]) ? bmap[symbol] : [];
+          if (bars.length) dailyBars.set(symbol, bars);
+        }
+      } catch (e) {
+        console.error("Radar daily-bar batch", index, e.message);
+      }
+    }
+  }
+
+  await Promise.all(
+    Array.from({length: Math.min(RADAR_CONCURRENCY, barChunks.length)}, barWorker)
+  );
+
+  for (const row of rows) {
+    const bars = dailyBars.get(row.symbol) || [];
+    const latest = bars.length ? bars[bars.length - 1] : null;
+    const previous = bars.length > 1 ? bars[bars.length - 2] : null;
+
+    const latestClose = Number(latest?.c);
+    const latestOpen = Number(latest?.o);
+    const previousClose = Number(previous?.c);
+
+    // Prefer close-to-previous-close. If only one daily bar exists, use the
+    // real current price versus today's real open. No synthetic prices.
+    const previousMove = finite(previousClose) && previousClose > 0 &&
+      finite(row.price) && row.price > 0
+      ? ((row.price - previousClose) / previousClose) * 100
+      : null;
+
+    const intradayMove = finite(latestOpen) && latestOpen > 0 &&
+      finite(row.price) && row.price > 0
+      ? ((row.price - latestOpen) / latestOpen) * 100
+      : null;
+
+    const snapshotMove = finite(row.changePct) ? Number(row.changePct) : null;
+    const signalPct = finite(previousMove) ? previousMove :
+      (finite(snapshotMove) ? snapshotMove :
+      (finite(intradayMove) ? intradayMove : null));
+
+    row.changePct = finite(signalPct) ? round(signalPct, 2) : null;
+    row.intradayPct = finite(intradayMove) ? round(intradayMove, 2) : row.intradayPct;
+    row.volume = finite(latest?.v) ? Number(latest.v) : row.volume;
+
+    row.trendScore = finite(signalPct)
+      ? round(clamp(
+          50 + signalPct * 8 + (finite(intradayMove) ? intradayMove * 4 : 0),
+          0, 100
+        ), 1)
+      : 50;
+
+    row.trend = row.trendScore >= 58 ? "UP" :
+      row.trendScore <= 42 ? "DOWN" : "MIXED";
+
+    row.updatedAt = row.updatedAt || latest?.t || Date.now();
+  }
+
+  // Sort by actual observed movement, not by a fabricated score.
   rows.sort((a,b) => {
     const score = Math.abs((b.changePct ?? 0)) - Math.abs((a.changePct ?? 0));
     return score || b.trendScore - a.trendScore || a.symbol.localeCompare(b.symbol);
