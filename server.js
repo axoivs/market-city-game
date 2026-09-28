@@ -239,6 +239,61 @@ function optionGreeks(type, spot, strike, ivPercent, days) {
   };
 }
 
+function makeExpirations() {
+  const now = new Date();
+  const out = [];
+  const seen = new Set();
+
+  const add = (date, expirationType) => {
+    const timestamp = date.getTime();
+    if (timestamp <= Date.now() || seen.has(timestamp)) return;
+    seen.add(timestamp);
+    out.push({
+      timestamp,
+      days: Math.max(1, Math.ceil((timestamp - Date.now()) / 86400000)),
+      expirationType
+    });
+  };
+
+  // Weekly Monday/Wednesday/Friday expirations for the next 14 weeks.
+  for (let offset = 1; offset <= 98; offset++) {
+    const d = new Date(now);
+    d.setHours(16, 0, 0, 0);
+    d.setDate(now.getDate() + offset);
+    const day = d.getDay();
+    if (day === 1 || day === 3 || day === 5) add(d, "W");
+  }
+
+  // Standard monthly: third Friday for the next 24 months.
+  for (let monthOffset = 0; monthOffset < 24; monthOffset++) {
+    const d = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1, 16, 0, 0, 0);
+    const firstFridayOffset = (5 - d.getDay() + 7) % 7;
+    d.setDate(1 + firstFridayOffset + 14);
+    add(d, "M");
+  }
+
+  // Quarterly: last business day of each quarter for the next 8 quarters.
+  for (let q = 0; q < 8; q++) {
+    const month = Math.floor((now.getMonth() + q * 3) / 3) * 3 + 2;
+    const year = now.getFullYear() + Math.floor(month / 12);
+    const actualMonth = month % 12;
+    const d = new Date(year, actualMonth + 1, 0, 16, 0, 0, 0);
+    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1);
+    add(d, "Q");
+  }
+
+  // January LEAPS-style expirations for the next five years.
+  for (let yearOffset = 0; yearOffset <= 5; yearOffset++) {
+    const year = now.getFullYear() + yearOffset;
+    const d = new Date(year, 0, 1, 16, 0, 0, 0);
+    const firstFridayOffset = (5 - d.getDay() + 7) % 7;
+    d.setDate(1 + firstFridayOffset + 14);
+    add(d, "L");
+  }
+
+  return out.sort((a, b) => a.timestamp - b.timestamp);
+}
+
 function makeStrikeLadder(spot) {
   // Keep strikes evenly spaced using standard $2.50 / $5 increments.
   // No irregular strike values such as $3.40, $5.90, or $8.40.
