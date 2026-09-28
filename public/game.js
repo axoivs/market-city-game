@@ -54,8 +54,9 @@ async function openRadar(){
   b.innerHTML='<div class="drawer-body"><div class="radar-note">REAL-DATA SIGNAL ENGINE. Scores rank current conditions; they do not predict guaranteed returns.</div><div id="radarBody">Loading real market radar…</div></div>';
   try{
     const r=await api("/api/radar");
-    const up=(r.up||[]).map(radarStockRow).join("")||'<div class="empty">No current uptrend signals.</div>';
-    const down=(r.down||[]).map(radarStockRow).join("")||'<div class="empty">No current downtrend signals.</div>';
+    const allStocks=Array.isArray(r.stocks)?r.stocks:[];
+    const up=(r.up||[]).map(radarStockRow).join("")||(allStocks.slice(0,8).map(radarStockRow).join("")||'<div class="empty">No Alpaca stock data returned.</div>');
+    const down=(r.down||[]).map(radarStockRow).join("")||(allStocks.slice(8,16).map(radarStockRow).join("")||'<div class="empty">No additional Alpaca stock data returned.</div>');
     const setups=(r.setups||[]).map(radarSetupRow).join("")||'<div class="empty">No option setup passed the filters.</div>';
     const big=(r.bigActivity||[]).map(x=>'<button class="radar-row radar-click" data-symbol="'+esc(x.symbol)+'"><span><b>'+esc(x.symbol)+'</b><small>'+esc(x.contractSymbol)+'</small></span><span class="radar-right"><b>'+money(x.notional)+'</b><small>'+Number(x.volume||0).toLocaleString()+' volume</small></span></button>').join("")||'<div class="empty">No large-activity flag right now.</div>';
     $("radarBody").innerHTML='<div class="radar-section"><h3>TRENDING UP</h3>'+up+'</div><div class="radar-section"><h3>TRENDING DOWN</h3>'+down+'</div><div class="radar-section"><h3>OPTION SETUP TRACKER</h3><p class="radar-help">Favors liquidity, tighter spreads, near-0.50 delta and 14–45 days to expiration.</p>'+setups+'</div><div class="radar-section"><h3>LARGE OPTION ACTIVITY</h3><p class="radar-help">Flags large notional activity. A trade print does not prove whether it was bought or sold.</p>'+big+'</div><div class="radar-foot">Updated '+new Date(r.updatedAt).toLocaleTimeString()+' · '+esc(r.feed||"Alpaca")+'</div>';
