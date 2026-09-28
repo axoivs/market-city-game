@@ -5,3 +5,17 @@
 .watch-row .watch-main{flex:1;min-width:0;border:0;background:transparent;color:inherit;padding:10px 11px;display:flex;justify-content:space-between;align-items:center;text-align:left;cursor:pointer}
 .watch-row .watch-remove{width:30px;flex:0 0 30px;border:0;border-left:1px solid #1d2b3b;background:transparent;color:#60758a;font-size:18px;line-height:1;cursor:pointer}
 .watch-row .watch-remove:hover{color:#ff8390;background:#17202b}
+
+.account-modal{position:fixed;inset:0;background:#0009;z-index:40;display:grid;place-items:center;padding:18px}
+.account-modal.hidden{display:none}
+.account-card{width:min(430px,100%);background:#0b121b;border:1px solid #2a394c;border-radius:9px;box-shadow:0 24px 70px #000b;padding:18px}
+.account-head{display:flex;justify-content:space-between;align-items:flex-start;gap:12px}
+.account-head h2{margin:4px 0 0;font-size:15px;letter-spacing:.05em}
+.account-close{border:0;background:transparent;color:#91a3b6;font-size:24px;line-height:1}
+.account-copy{color:#71869b;font-size:10px;line-height:1.6;margin:10px 0 14px}
+.account-card label{display:block;color:#8295a9;font-size:9px;letter-spacing:.08em;margin-top:10px}
+.account-card input{display:block;width:100%;margin-top:6px;background:#0e1722;border:1px solid #334256;color:#dce5ef;border-radius:5px;padding:10px}
+.account-actions{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:15px}
+.account-actions button{border-radius:5px;padding:10px;font-weight:900;font-size:10px}
+.account-logout{margin-top:10px;width:100%}
+.account-status{min-height:18px;margin-top:10px;color:#7e93a9;font-size:9px;line-height:1.5}
