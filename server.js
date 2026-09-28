@@ -501,7 +501,17 @@ wss.on("connection", (ws, req) => {
 });
 
 updateRealMarket();
-setInterval(updateRealMarket, 10000);
+realMarket.startRealTimeStreams(market, SYMBOLS, round, payload => {
+  if (!payload) {
+    broadcast({ type: "market", market: marketPayload(), leaderboard: leaderboard(), online: sockets.size });
+    return;
+  }
+  if (payload.type === "optionTick") {
+    broadcast(payload);
+    return;
+  }
+  broadcast(payload);
+});
 
 setInterval(savePlayers, 15000);
 
