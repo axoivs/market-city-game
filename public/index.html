@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>Market City</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div class="brand"><span class="brand-mark">◆</span><span>MARKET CITY</span><small>SIMULATION</small></div>
+      <div class="account">
+        <span>Cash <b id="cash">$100,000</b></span>
+        <span>Portfolio <b id="portfolio">$100,000</b></span>
+        <span>Level <b id="level">1</b></span>
+        <button id="nameBtn" class="ghost">Trader</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="panel watchlist">
+        <div class="panel-title">MARKET WATCH</div>
+        <div id="watchlist"></div>
+        <div class="hint">Prices move every 2 seconds.</div>
+      </aside>
+
+      <section class="world-wrap">
+        <canvas id="game" width="1360" height="780"></canvas>
+        <div class="world-hud">
+          <span>WASD / Arrow Keys to move</span>
+          <span id="online">0 online</span>
+        </div>
+        <div id="toast" class="toast"></div>
+      </section>
+
+      <aside class="panel order-panel">
+        <div class="panel-title">TRADING DESK</div>
+        <label>Symbol<select id="symbol"></select></label>
+        <div id="quote" class="quote-card"></div>
+
+        <div class="tabs">
+          <button class="tab active" data-tab="stock">STOCK</button>
+          <button class="tab" data-tab="options">OPTIONS</button>
+        </div>
+
+        <div id="stockTab">
+          <label>Shares<input id="shares" type="number" min="1" value="10"></label>
+          <div class="order-buttons">
+            <button id="buyStock" class="buy">BUY</button>
+            <button id="sellStock" class="sell">SELL</button>
+          </div>
+        </div>
+
+        <div id="optionsTab" hidden>
+          <label>Contract<select id="contract"></select></label>
+          <label>Contracts<input id="contracts" type="number" min="1" max="100" value="1"></label>
+          <button id="buyOption" class="buy wide">BUY OPTION</button>
+          <div id="greeks" class="greeks"></div>
+        </div>
+
+        <div class="desk-note">All trades use virtual money. No real securities are purchased.</div>
+      </aside>
+    </main>
+
+    <nav class="menu">
+      <button class="menu-btn active" data-screen="city">CITY</button>
+      <button class="menu-btn" data-screen="portfolio">PORTFOLIO</button>
+      <button class="menu-btn" data-screen="news">NEWS</button>
+      <button class="menu-btn" data-screen="missions">MISSIONS</button>
+      <button class="menu-btn" data-screen="leaderboard">LEADERBOARD</button>
+    </nav>
+
+    <section id="drawer" class="drawer hidden">
+      <div class="drawer-head"><h2 id="drawerTitle">Portfolio</h2><button id="closeDrawer">×</button></div>
+      <div id="drawerContent"></div>
+    </section>
+  </div>
+  <script src="/game.js"></script>
+</body>
+</html>
