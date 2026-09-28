@@ -16,7 +16,7 @@ if (!playerId) {
   }
   localStorage.setItem("marketCityPlayerId", playerId);
 }
-const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "?playerId=" + encodeURIComponent(playerId));
+const ws = new WebSocket("wss://" + location.host + "?playerId=" + encodeURIComponent(playerId));
 const state = { player: null, market: [], others: [], leaderboard: [], online: 0, selected: "AAPL", options: [] };
 
 async function httpBootstrap() {
