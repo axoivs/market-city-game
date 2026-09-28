@@ -381,67 +381,138 @@ async function getNews(symbols = []) {
 
 const radarCache = { data: null, at: 0 };
 
-const RADAR_SYMBOLS = [
-  "AAPL","MSFT","NVDA","AMZN","TSLA","GOOGL","META","AMD",
-  "AVGO","MU","NFLX","JPM","SPY","QQQ","IWM","COIN"
-];
+const RADAR_BATCH_SIZE = 100;
+const RADAR_OPTION_TARGETS = 12;
+const RADAR_CONCURRENCY = 3;
 
 function clamp(n,min,max){return Math.max(min,Math.min(max,n));}
 
 async function getRadar() {
   if (radarCache.data && Date.now() - radarCache.at < 60000) return radarCache.data;
 
-  const symbols = [...new Set(RADAR_SYMBOLS)];
-  const encoded = encodeURIComponent(symbols.join(","));
-  const [quotes, trades, bars] = await Promise.all([
-    request(DATA_HOST, "/v2/stocks/quotes/latest?symbols=" + encoded + "&feed=" + encodeURIComponent(STOCK_FEED)),
-    request(DATA_HOST, "/v2/stocks/trades/latest?symbols=" + encoded + "&feed=" + encodeURIComponent(STOCK_FEED)),
-    request(DATA_HOST, "/v2/stocks/bars?symbols=" + encoded + "&timeframe=1Min&limit=120&feed=" + encodeURIComponent(STOCK_FEED) + "&adjustment=raw")
-  ]);
+  // Build the radar from the complete active US-equity universe returned by Alpaca.
+  // This is intentionally not a hard-coded watchlist.
+  const assets = await getAssets();
+  const symbols = assets
+    .map(a => a.symbol)
+    .filter(s => /^[A-Z0-9.\-]{1,20}$/.test(s));
 
-  const qmap = quotes?.quotes || {};
-  const tmap = trades?.trades || {};
-  const bmap = bars?.bars || {};
+  const chunks = [];
+  for (let i = 0; i < symbols.length; i += RADAR_BATCH_SIZE) {
+    chunks.push(symbols.slice(i, i + RADAR_BATCH_SIZE));
+  }
 
-  const rows = symbols.map(symbol => {
-    const q = qmap[symbol] || {};
-    const t = tmap[symbol] || {};
-    const historyBars = Array.isArray(bmap[symbol]) ? bmap[symbol] : [];
-    const last = Number(t.p);
-    const ask = Number(q.ap);
-    const bid = Number(q.bp);
-    const latestBar = historyBars.length ? historyBars[historyBars.length - 1] : null;
-    const previousBar = historyBars.length > 1 ? historyBars[historyBars.length - 2] : null;
-    const price = finite(last) && last > 0 ? last :
-      (finite(ask) && ask > 0 ? ask : (finite(bid) && bid > 0 ? bid : null));
-    const open = Number(latestBar?.o);
-    const previousClose = Number(previousBar?.c);
-    const changePct = finite(price) && finite(previousClose) && previousClose > 0
-      ? ((price - previousClose) / previousClose) * 100 : null;
-    const intradayPct = finite(price) && finite(open) && open > 0
-      ? ((price - open) / open) * 100 : null;
-    const trendScore = finite(changePct)
-      ? clamp(50 + changePct * 8 + (finite(intradayPct) ? intradayPct * 4 : 0), 0, 100)
+  const rows = [];
+  let cursor = 0;
+  async function worker() {
+    while (true) {
+      const index = cursor++;
+      if (index >= chunks.length) return;
+      const batch = chunks[index];
+      const encoded = encodeURIComponent(batch.join(","));
+      try {
+        const [quotes, trades] = await Promise.all([
+          request(DATA_HOST, "/v2/stocks/quotes/latest?symbols=" + encoded + "&feed=" + encodeURIComponent(STOCK_FEED)),
+          request(DATA_HOST, "/v2/stocks/trades/latest?symbols=" + encoded + "&feed=" + encodeURIComponent(STOCK_FEED))
+        ]);
+        const qmap = quotes?.quotes || {};
+        const tmap = trades?.trades || {};
+
+        for (const symbol of batch) {
+          const q = qmap[symbol] || {};
+          const t = tmap[symbol] || {};
+          const last = Number(t.p);
+          const ask = Number(q.ap);
+          const bid = Number(q.bp);
+          const price = finite(last) && last > 0 ? last :
+            (finite(ask) && ask > 0 ? ask : (finite(bid) && bid > 0 ? bid : null));
+          if (!finite(price) || price <= 0) continue;
+
+          const asset = assets.find(a => a.symbol === symbol);
+          rows.push({
+            symbol,
+            name: asset?.name || symbol,
+            exchange: asset?.exchange || "",
+            hasOptions: !!asset?.hasOptions,
+            price: round(price),
+            bid: finite(bid) && bid > 0 ? round(bid) : null,
+            ask: finite(ask) && ask > 0 ? round(ask) : null,
+            changePct: null,
+            intradayPct: null,
+            volume: null,
+            trend: "MIXED",
+            trendScore: 50,
+            real: true
+          });
+        }
+      } catch (e) {
+        console.error("Radar stock batch", index, e.message);
+      }
+    }
+  }
+
+  await Promise.all(Array.from({length: Math.min(RADAR_CONCURRENCY, chunks.length)}, worker));
+
+  // Get real daily bars only for the stocks that have a usable current quote.
+  // Batching keeps the complete-universe scan practical on Alpaca's API limits.
+  const barRows = new Map();
+  const barChunks = [];
+  const pricedSymbols = rows.map(x => x.symbol);
+  for (let i = 0; i < pricedSymbols.length; i += RADAR_BATCH_SIZE) {
+    barChunks.push(pricedSymbols.slice(i, i + RADAR_BATCH_SIZE));
+  }
+
+  cursor = 0;
+  async function barWorker() {
+    while (true) {
+      const index = cursor++;
+      if (index >= barChunks.length) return;
+      const batch = barChunks[index];
+      try {
+        const data = await request(
+          DATA_HOST,
+          "/v2/stocks/bars?symbols=" + encodeURIComponent(batch.join(",")) +
+          "&timeframe=1Day&limit=2&feed=" + encodeURIComponent(STOCK_FEED) +
+          "&adjustment=raw"
+        );
+        const bmap = data?.bars || {};
+        for (const symbol of batch) {
+          const bars = Array.isArray(bmap[symbol]) ? bmap[symbol] : [];
+          if (bars.length) barRows.set(symbol, bars);
+        }
+      } catch (e) {
+        console.error("Radar daily-bar batch", index, e.message);
+      }
+    }
+  }
+
+  await Promise.all(Array.from({length: Math.min(RADAR_CONCURRENCY, barChunks.length)}, barWorker));
+
+  for (const row of rows) {
+    const bars = barRows.get(row.symbol) || [];
+    const latest = bars.length ? bars[bars.length - 1] : null;
+    const previous = bars.length > 1 ? bars[bars.length - 2] : null;
+    const open = Number(latest?.o);
+    const previousClose = Number(previous?.c);
+    row.volume = finite(latest?.v) ? Number(latest.v) : null;
+    row.intradayPct = finite(row.price) && finite(open) && open > 0
+      ? round(((row.price - open) / open) * 100, 2) : null;
+    row.changePct = finite(row.price) && finite(previousClose) && previousClose > 0
+      ? round(((row.price - previousClose) / previousClose) * 100, 2) : null;
+    row.trendScore = finite(row.changePct)
+      ? round(clamp(50 + row.changePct * 8 + (finite(row.intradayPct) ? row.intradayPct * 4 : 0), 0, 100), 1)
       : 50;
+    row.trend = row.trendScore >= 58 ? "UP" : row.trendScore <= 42 ? "DOWN" : "MIXED";
+  }
 
-    return {
-      symbol,
-      price: finite(price) ? round(price) : null,
-      bid: finite(bid) && bid > 0 ? round(bid) : null,
-      ask: finite(ask) && ask > 0 ? round(ask) : null,
-      changePct: finite(changePct) ? round(changePct, 2) : null,
-      intradayPct: finite(intradayPct) ? round(intradayPct, 2) : null,
-      volume: finite(latestBar?.v) ? Number(latestBar.v) : null,
-      trend: trendScore >= 58 ? "UP" : trendScore <= 42 ? "DOWN" : "MIXED",
-      trendScore: round(trendScore, 1),
-      real: true
-    };
-  }).filter(x => finite(x.price));
+  rows.sort((a,b) => b.trendScore - a.trendScore);
 
+  // Option analysis is still limited to the most active/current movers so the
+  // complete stock universe can be scanned without requesting thousands of chains.
   const optionTargets = rows
-    .filter(x => finite(x.changePct))
+    .filter(x => x.hasOptions && finite(x.changePct))
     .sort((a,b) => Math.abs(b.changePct) - Math.abs(a.changePct))
-    .slice(0, 6);
+    .slice(0, RADAR_OPTION_TARGETS);
 
   const setups = [];
   const bigActivity = [];
@@ -462,76 +533,37 @@ async function getRadar() {
         if (!finite(o.strike) || !finite(row.price) || row.price <= 0) return false;
         const moneyness = Math.abs(o.strike - row.price) / row.price;
         const delta = Math.abs(Number(o.delta));
-        return moneyness <= 0.10 &&
-          (!finite(o.delta) || (delta >= 0.30 && delta <= 0.70));
+        return moneyness <= 0.10 && (!finite(o.delta) || (delta >= 0.30 && delta <= 0.70));
       });
 
       const scored = candidates.map(o => {
-        const spread = finite(o.bid) && o.bid > 0 && finite(o.ask)
-          ? (o.ask - o.bid) / o.ask : 1;
-        const liquidity = Math.min(100,
-          Math.log10(1 + (o.volume || 0)) * 25 +
-          Math.log10(1 + (o.openInterest || 0)) * 10
-        );
-        const deltaFit = finite(o.delta)
-          ? 100 - Math.abs(Math.abs(o.delta) - 0.50) * 180 : 50;
+        const spread = finite(o.bid) && o.bid > 0 && finite(o.ask) ? (o.ask - o.bid) / o.ask : 1;
+        const liquidity = Math.min(100, Math.log10(1 + (o.volume || 0)) * 25 + Math.log10(1 + (o.openInterest || 0)) * 10);
+        const deltaFit = finite(o.delta) ? 100 - Math.abs(Math.abs(o.delta) - 0.50) * 180 : 50;
         const dte = o.days || 0;
-        const dteFit = dte >= 14 && dte <= 45
-          ? 100 : Math.max(0, 100 - Math.abs(dte - 30) * 3);
-        const score = clamp(
-          liquidity * 0.35 +
-          deltaFit * 0.30 +
-          dteFit * 0.20 +
-          (1 - Math.min(1, spread)) * 100 * 0.15,
-          0, 100
-        );
+        const dteFit = dte >= 14 && dte <= 45 ? 100 : Math.max(0, 100 - Math.abs(dte - 30) * 3);
+        const score = clamp(liquidity * 0.35 + deltaFit * 0.30 + dteFit * 0.20 + (1 - Math.min(1, spread)) * 100 * 0.15, 0, 100);
         const notional = finite(o.ask) ? o.ask * (o.size || 100) * (o.volume || 0) : 0;
-        if (notional >= 100000) {
-          bigActivity.push({
-            symbol: row.symbol,
-            contractSymbol: o.contractSymbol,
-            type: o.type,
-            strike: o.strike,
-            expirationDate: o.expirationDate,
-            volume: o.volume,
-            openInterest: o.openInterest,
-            notional: round(notional)
-          });
-        }
-        return {
-          ...o,
-          setupScore: round(score, 1),
-          spreadPct: round(spread * 100, 2),
-          direction: direction.toUpperCase()
-        };
+        if (notional >= 100000) bigActivity.push({
+          symbol: row.symbol, contractSymbol: o.contractSymbol, type: o.type,
+          strike: o.strike, expirationDate: o.expirationDate, volume: o.volume,
+          openInterest: o.openInterest, notional: round(notional)
+        });
+        return {...o, setupScore: round(score, 1), spreadPct: round(spread * 100, 2), direction: direction.toUpperCase()};
       }).sort((a,b) => b.setupScore - a.setupScore);
 
       if (scored[0]) {
         const o = scored[0];
         setups.push({
-          symbol: row.symbol,
-          trend: row.trend,
-          trendScore: row.trendScore,
-          stockPrice: row.price,
-          changePct: row.changePct,
-          contractSymbol: o.contractSymbol,
-          type: o.type,
-          strike: o.strike,
-          expirationDate: o.expirationDate,
-          days: o.days,
-          ask: o.ask,
-          bid: o.bid,
-          iv: o.iv,
-          delta: o.delta,
-          volume: o.volume,
-          openInterest: o.openInterest,
-          spreadPct: o.spreadPct,
-          setupScore: o.setupScore,
-          reason: row.trend === "UP"
-            ? "Uptrend + liquid near-ATM call setup"
-            : row.trend === "DOWN"
-              ? "Downtrend + liquid near-ATM put setup"
-              : "Mixed trend + liquid near-ATM option setup"
+          symbol: row.symbol, trend: row.trend, trendScore: row.trendScore,
+          stockPrice: row.price, changePct: row.changePct,
+          contractSymbol: o.contractSymbol, type: o.type, strike: o.strike,
+          expirationDate: o.expirationDate, days: o.days, ask: o.ask, bid: o.bid,
+          iv: o.iv, delta: o.delta, volume: o.volume, openInterest: o.openInterest,
+          spreadPct: o.spreadPct, setupScore: o.setupScore,
+          reason: row.trend === "UP" ? "Uptrend + liquid near-ATM call setup"
+            : row.trend === "DOWN" ? "Downtrend + liquid near-ATM put setup"
+            : "Mixed trend + liquid near-ATM option setup"
         });
       }
     } catch (e) {
@@ -542,14 +574,20 @@ async function getRadar() {
   const result = {
     updatedAt: Date.now(),
     feed: STOCK_FEED,
-    stocks: rows.sort((a,b) => b.trendScore - a.trendScore),
-    up: rows.filter(x => x.trend === "UP").sort((a,b) => b.trendScore - a.trendScore).slice(0, 8),
+    universe: {
+      provider: "Alpaca",
+      assetClass: "us_equity",
+      activeTradableAssets: assets.length,
+      quotedStocks: rows.length
+    },
+    stocks: rows,
+    up: rows.filter(x => x.trend === "UP").slice(0, 8),
     down: rows.filter(x => x.trend === "DOWN").sort((a,b) => a.trendScore - b.trendScore).slice(0, 8),
     setups: setups.sort((a,b) => b.setupScore - a.setupScore),
     bigActivity: bigActivity.sort((a,b) => b.notional - a.notional).slice(0, 12),
     methodology: {
-      trend: "Current Alpaca quote/trade data plus recent real 1-minute bars.",
-      setup: "Liquidity, bid/ask spread, delta near 0.50, and 14–45 DTE preference.",
+      trend: "Current Alpaca quotes/trades plus real daily bars across the complete active tradable US-equity universe.",
+      setup: "Option analysis is applied to the most active movers with Alpaca-listed options; the stock radar itself covers the full universe.",
       bigActivity: "Option volume × ask × contract size; this flags large activity, not proven buy-side flow.",
       disclaimer: "Signals are game analytics, not guaranteed returns or financial advice."
     }
