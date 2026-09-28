@@ -450,8 +450,45 @@ function sendState(ws, player) {
   });
 }
 
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = "";
+    req.on("data", chunk => {
+      body += chunk;
+      if (body.length > 1024 * 1024) {
+        req.destroy();
+        reject(new Error("Request body too large"));
+      }
+    });
+    req.on("end", () => {
+      if (!body) return resolve({});
+      try { resolve(JSON.parse(body)); }
+      catch { reject(new Error("Invalid JSON")); }
+    });
+    req.on("error", reject);
+  });
+}
+
+function playerIdFromRequest(value) {
+  const id = String(value || "");
+  return /^[a-f0-9-]{20,64}$/i.test(id) ? id : crypto.randomUUID();
+}
+
 const server = http.createServer((req, res) => {
   const url = new URL(req.url, "http://" + req.headers.host);
+  if (url.pathname === "/api/bootstrap") {
+    const id = playerIdFromRequest(url.searchParams.get("playerId"));
+    const player = getPlayer(id);
+    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+    return res.end(JSON.stringify({
+      playerId: id,
+      player: publicPlayer(player),
+      market: marketPayload(),
+      leaderboard: leaderboard(),
+      online: sockets.size
+    }));
+  }
+
   if (url.pathname === "/api/health") {
     res.writeHead(200, { "Content-Type": "application/json" });
     return res.end(JSON.stringify({ ok: true, game: "market-city", time: Date.now() }));
@@ -460,6 +497,41 @@ const server = http.createServer((req, res) => {
   if (url.pathname === "/api/market") {
     res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
     return res.end(JSON.stringify({ market: marketPayload(), leaderboard: leaderboard(), online: sockets.size }));
+  }
+
+  if (url.pathname === "/api/action" && req.method === "POST") {
+    readJsonBody(req).then(body => {
+      const id = playerIdFromRequest(body.playerId);
+      const player = getPlayer(id);
+      const type = String(body.type || "");
+
+      if (type === "hello") {
+        const name = String(body.name || "").trim().slice(0, 20);
+        if (name) player.name = name.replace(/[^a-zA-Z0-9 _-]/g, "");
+      } else if (type === "stockOrder") {
+        tradeStock(player, String(body.symbol || "").toUpperCase(), body.side, body.quantity);
+      } else if (type === "optionOrder") {
+        tradeOption(player, body);
+      } else if (type === "tourComplete") {
+        completeMission(player, "cityTour");
+      } else {
+        throw new Error("Unknown action");
+      }
+
+      savePlayers();
+      res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+      res.end(JSON.stringify({
+        playerId: id,
+        player: publicPlayer(player),
+        market: marketPayload(),
+        leaderboard: leaderboard(),
+        online: sockets.size
+      }));
+    }).catch(err => {
+      res.writeHead(400, { "Content-Type": "application/json" });
+      res.end(JSON.stringify({ error: err.message || "Request failed" }));
+    });
+    return;
   }
 
   if (url.pathname === "/api/options") {
