@@ -20,6 +20,47 @@ const optionLive = new Map();
 const chainCache = new Map();
 const expirationCache = new Map();
 const newsCache = { items: [], at: 0 };
+const assetCache = { items: [], at: 0 };
+
+async function getAssets(search = "") {
+  const now = Date.now();
+  if (!assetCache.items.length || now - assetCache.at > 300000) {
+    const items = [];
+    let token = "";
+    do {
+      const q = new URLSearchParams({ status: "active", asset_class: "us_equity" });
+      if (token) q.set("page_token", token);
+      const data = await request(TRADING_HOST, "/v2/assets?" + q.toString());
+      for (const a of (Array.isArray(data) ? data : [])) {
+        if (a.symbol && a.tradable !== false) items.push({ symbol: a.symbol, name: a.name || a.symbol, exchange: a.exchange || "", hasOptions: Array.isArray(a.attributes) ? a.attributes.includes("has_options") || a.attributes.includes("options_enabled") : !!a.has_options });
+      }
+      token = data.next_page_token || "";
+    } while (token);
+    items.sort((a,b) => a.symbol.localeCompare(b.symbol));
+    assetCache.items = items;
+    assetCache.at = now;
+  }
+  const q = String(search || "").trim().toLowerCase();
+  return q ? assetCache.items.filter(a => a.symbol.toLowerCase().includes(q) || a.name.toLowerCase().includes(q)) : assetCache.items;
+}
+
+async function getStockQuote(symbol) {
+  const s = String(symbol || "").toUpperCase();
+  if (!/^[A-Z0-9.\\-]{1,20}$/.test(s)) throw new Error("Invalid stock symbol.");
+  const [quotes, trades, bars] = await Promise.all([
+    request(DATA_HOST, "/v2/stocks/quotes/latest?symbols=" + encodeURIComponent(s) + "&feed=" + encodeURIComponent(STOCK_FEED)),
+    request(DATA_HOST, "/v2/stocks/trades/latest?symbols=" + encodeURIComponent(s) + "&feed=" + encodeURIComponent(STOCK_FEED)),
+    request(DATA_HOST, "/v2/stocks/bars?symbols=" + encodeURIComponent(s) + "&timeframe=1Min&limit=120&feed=" + encodeURIComponent(STOCK_FEED) + "&adjustment=raw")
+  ]);
+  const q = quotes?.quotes?.[s] || {}, t = trades?.trades?.[s] || {}, b = Array.isArray(bars?.bars?.[s]) ? bars.bars[s] : [];
+  const bid = Number(q.bp), ask = Number(q.ap), last = Number(t.p);
+  const price = finite(last) && last > 0 ? last : (finite(ask) && ask > 0 ? ask : (finite(bid) && bid > 0 ? bid : null));
+  const history = b.map(x => Number(x.c)).filter(Number.isFinite).slice(-120);
+  if (!finite(price) || price <= 0) throw new Error("Alpaca has no current quote for " + s + ".");
+  const asset = assetCache.items.find(a => a.symbol === s);
+  return { symbol:s, name:asset?.name || s, price:round(price), bid:finite(bid)&&bid>0?round(bid):null, ask:finite(ask)&&ask>0?round(ask):null, open:null, previousClose:null, change:null, changePct:null, history:history.length?history:[round(price)], updatedAt:t.t||q.t||Date.now(), stream:false, feed:STOCK_FEED, real:true };
+}
+
 
 function credentials() {
   if (!KEY || !SECRET) throw new Error("Alpaca credentials are missing on the server.");
@@ -359,4 +400,4 @@ function start(market, symbols, round, broadcast) {
   stockSymbols = new Set(Object.keys(symbols));
   connectStock();
 }
-module.exports = { refreshMarket, start, getOptionChain, getExpirations, getNews, publicStock, getOptionLive };
+module.exports = { refreshMarket, start, getOptionChain, getExpirations, getNews, publicStock, getOptionLive, getAssets, getStockQuote };
