@@ -23,7 +23,8 @@ function fetchQuote(symbol) {
 }
 
 async function refreshMarket(market, symbols, round) {
-  for (const symbol of Object.keys(symbols)) {
+  const entries = Object.keys(symbols);
+  await Promise.all(entries.map(async symbol => {
     try {
       const data = await fetchQuote(symbol);
       const result = data.chart?.result?.[0];
@@ -54,7 +55,7 @@ async function refreshMarket(market, symbols, round) {
     } catch (err) {
       console.error("Real market update failed for " + symbol + ":", err.message);
     }
-  }
+  }));
 }
 
 module.exports = { fetchQuote, refreshMarket };
