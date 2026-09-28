@@ -324,6 +324,7 @@ async function getNews(symbols = []) {
   return items;
 }
 
+function getOptionLive(symbol) { return optionLive.get(symbol) || null; }
 function finite(v) { return Number.isFinite(Number(v)); }
 function round(n, digits = 2) {
   const p = 10 ** digits;
@@ -346,4 +347,4 @@ function start(market, symbols, round, broadcast) {
   connectStock();
   connectOptions();
 }
-module.exports = { refreshMarket, start, getOptionChain, getExpirations, getNews, publicStock };
+module.exports = { refreshMarket, start, getOptionChain, getExpirations, getNews, publicStock, getOptionLive };
