@@ -170,21 +170,33 @@ function subscribeOptions(symbols) {
 async function refreshMarket(market, symbols, round) {
   const names = Object.keys(symbols);
   const data = await request(DATA_HOST, "/v2/stocks/snapshots?symbols=" + encodeURIComponent(names.join(",")) + "&feed=" + encodeURIComponent(STOCK_FEED));
+  const snapshots = data && data.snapshots && typeof data.snapshots === "object" ? data.snapshots : {};
+  let loaded = 0;
+
   for (const symbol of names) {
-    const snap = data.snapshots?.[symbol];
+    const snap = snapshots[symbol];
     if (!snap) continue;
     const stock = market[symbol];
     const trade = snap.latestTrade || {};
     const quote = snap.latestQuote || {};
     const daily = snap.dailyBar || {};
     const prev = snap.prevDailyBar || {};
-    const px = Number(trade.p ?? quote.ap ?? quote.bp);
-    if (Number.isFinite(px) && px > 0) stock.price = round(px);
-    if (Number.isFinite(Number(quote.bp))) stock.bid = round(Number(quote.bp));
-    if (Number.isFinite(Number(quote.ap))) stock.ask = round(Number(quote.ap));
+    const tradePx = Number(trade.p);
+    const askPx = Number(quote.ap);
+    const bidPx = Number(quote.bp);
+    const price = Number.isFinite(tradePx) && tradePx > 0 ? tradePx :
+      (Number.isFinite(askPx) && askPx > 0 ? askPx :
+      (Number.isFinite(bidPx) && bidPx > 0 ? bidPx : NaN));
+
+    if (Number.isFinite(price) && price > 0) {
+      stock.price = round(price);
+      loaded++;
+    }
+    if (Number.isFinite(bidPx) && bidPx > 0) stock.bid = round(bidPx);
+    if (Number.isFinite(askPx) && askPx > 0) stock.ask = round(askPx);
     if (Number.isFinite(Number(daily.o))) stock.open = round(Number(daily.o));
     if (Number.isFinite(Number(prev.c))) stock.previousClose = round(Number(prev.c));
-    if (Number.isFinite(stock.price) && Number.isFinite(stock.previousClose)) {
+    if (Number.isFinite(stock.price) && Number.isFinite(stock.previousClose) && stock.previousClose !== 0) {
       stock.change = round(stock.price - stock.previousClose);
       stock.changePct = round((stock.change / stock.previousClose) * 100, 2);
     }
@@ -193,6 +205,12 @@ async function refreshMarket(market, symbols, round) {
     stock.history = stock.history || [];
     if (Number.isFinite(stock.price)) stock.history.push(stock.price);
     stock.history = stock.history.slice(-120);
+  }
+
+  console.log("Alpaca stock snapshot seed:", loaded + "/" + names.length,
+    names.map(symbol => symbol + "=" + (finite(market[symbol].price) ? market[symbol].price : "MISSING")).join(" "));
+  if (!loaded) {
+    throw new Error("Alpaca returned no usable stock prices from the " + STOCK_FEED + " snapshot feed.");
   }
 }
 
