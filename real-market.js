@@ -378,6 +378,136 @@ async function getNews(symbols = []) {
   return items;
 }
 
+
+const radarCache = { data: null, at: 0 };
+
+const RADAR_SYMBOLS = [
+  "AAPL","MSFT","NVDA","AMZN","TSLA","GOOGL","META","AMD",
+  "AVGO","MU","NFLX","JPM","SPY","QQQ","IWM","COIN"
+];
+
+function clamp(n,min,max){return Math.max(min,Math.min(max,n));}
+
+async function getRadar() {
+  if (radarCache.data && Date.now() - radarCache.at < 60000) return radarCache.data;
+
+  const symbols = [...new Set(RADAR_SYMBOLS)];
+  const snapshots = await request(
+    DATA_HOST,
+    "/v2/stocks/snapshots?symbols=" + encodeURIComponent(symbols.join(",")) +
+    "&feed=" + encodeURIComponent(STOCK_FEED)
+  );
+
+  const rows = Object.entries(snapshots?.snapshots || {}).map(([symbol,s]) => {
+    const last = Number(s.latestTrade?.p);
+    const ask = Number(s.latestQuote?.ap);
+    const bid = Number(s.latestQuote?.bp);
+    const price = finite(last) && last > 0 ? last :
+      (finite(ask) && ask > 0 ? ask : (finite(bid) && bid > 0 ? bid : null));
+    const prev = Number(s.prevDailyBar?.c);
+    const open = Number(s.dailyBar?.o);
+    const volume = Number(s.dailyBar?.v);
+    const changePct = finite(price) && finite(prev) && prev > 0 ? ((price-prev)/prev)*100 : null;
+    const intradayPct = finite(price) && finite(open) && open > 0 ? ((price-open)/open)*100 : null;
+    const trendScore = finite(changePct)
+      ? clamp(50 + changePct*8 + (finite(intradayPct)?intradayPct*4:0), 0, 100)
+      : 50;
+    return {
+      symbol, price: finite(price)?round(price):null,
+      bid:finite(bid)&&bid>0?round(bid):null,
+      ask:finite(ask)&&ask>0?round(ask):null,
+      changePct:finite(changePct)?round(changePct,2):null,
+      intradayPct:finite(intradayPct)?round(intradayPct,2):null,
+      volume:finite(volume)?volume:null,
+      trend: trendScore >= 58 ? "UP" : trendScore <= 42 ? "DOWN" : "MIXED",
+      trendScore: round(trendScore,1)
+    };
+  }).filter(x => finite(x.price));
+
+  const optionTargets = rows
+    .filter(x => finite(x.changePct))
+    .sort((a,b)=>Math.abs(b.changePct)-Math.abs(a.changePct))
+    .slice(0,8);
+
+  const setups = [];
+  const bigActivity = [];
+
+  for (const row of optionTargets) {
+    try {
+      const expirations = await getExpirations(row.symbol);
+      const today = Date.now();
+      const expiration = expirations.find(d => {
+        const days=(Date.parse(d+"T23:59:59-04:00")-today)/86400000;
+        return days >= 14 && days <= 45;
+      }) || expirations[0];
+      if (!expiration) continue;
+
+      const chain = await getOptionChain(row.symbol, expiration);
+      const spot = row.price;
+      const direction = row.trend === "DOWN" ? "put" : "call";
+      const candidates = chain.chain.filter(o => {
+        if (o.type !== direction || !finite(o.ask) || o.ask <= 0) return false;
+        if (!finite(o.strike) || !finite(spot) || spot <= 0) return false;
+        const moneyness = Math.abs(o.strike-spot)/spot;
+        const delta = Math.abs(Number(o.delta));
+        return moneyness <= 0.10 && (!finite(delta) || (delta >= 0.30 && delta <= 0.70));
+      });
+
+      const scored = candidates.map(o => {
+        const spread = finite(o.bid) && o.bid > 0 && finite(o.ask)
+          ? (o.ask-o.bid)/o.ask : 1;
+        const liquidity = Math.min(100, Math.log10(1+(o.volume||0))*25 + Math.log10(1+(o.openInterest||0))*10);
+        const deltaFit = finite(o.delta) ? 100 - Math.abs(Math.abs(o.delta)-0.50)*180 : 50;
+        const dte = o.days || 0;
+        const dteFit = dte >= 14 && dte <= 45 ? 100 : Math.max(0,100-Math.abs(dte-30)*3);
+        const score = clamp(liquidity*0.35 + deltaFit*0.30 + dteFit*0.20 + (1-Math.min(1,spread))*100*0.15,0,100);
+        const notional = finite(o.ask) ? o.ask*(o.size||100)*(o.volume||0) : 0;
+        if (notional >= 100000) bigActivity.push({
+          symbol:row.symbol, contractSymbol:o.contractSymbol, type:o.type,
+          strike:o.strike, expirationDate:o.expirationDate, volume:o.volume,
+          openInterest:o.openInterest, notional:round(notional)
+        });
+        return {...o, setupScore:round(score,1), spreadPct:round(spread*100,2), direction:direction.toUpperCase()};
+      }).sort((a,b)=>b.setupScore-a.setupScore);
+
+      if (scored[0]) {
+        const o=scored[0];
+        setups.push({
+          symbol:row.symbol, trend:row.trend, trendScore:row.trendScore,
+          stockPrice:row.price, changePct:row.changePct,
+          contractSymbol:o.contractSymbol, type:o.type, strike:o.strike,
+          expirationDate:o.expirationDate, days:o.days, ask:o.ask, bid:o.bid,
+          iv:o.iv, delta:o.delta, volume:o.volume, openInterest:o.openInterest,
+          spreadPct:o.spreadPct, setupScore:o.setupScore,
+          reason: row.trend==="UP"
+            ? "Uptrend + liquid near-ATM call setup"
+            : "Downtrend + liquid near-ATM put setup"
+        });
+      }
+    } catch (e) {
+      console.error("Radar option scan", row.symbol, e.message);
+    }
+  }
+
+  const result = {
+    updatedAt:Date.now(),
+    feed:STOCK_FEED,
+    stocks:rows.sort((a,b)=>b.trendScore-a.trendScore),
+    up:rows.filter(x=>x.trend==="UP").sort((a,b)=>b.trendScore-a.trendScore).slice(0,8),
+    down:rows.filter(x=>x.trend==="DOWN").sort((a,b)=>a.trendScore-b.trendScore).slice(0,8),
+    setups:setups.sort((a,b)=>b.setupScore-a.setupScore),
+    bigActivity:bigActivity.sort((a,b)=>b.notional-a.notional).slice(0,12),
+    methodology:{
+      trend:"Daily change plus intraday change from Alpaca snapshots.",
+      setup:"Liquidity, bid/ask spread, delta near 0.50, and 14–45 DTE preference.",
+      bigActivity:"Option volume × ask × contract size; this flags large activity, not proven buy-side flow.",
+      disclaimer:"Signals are game analytics, not guaranteed returns or financial advice."
+    }
+  };
+  radarCache.data=result; radarCache.at=Date.now();
+  return result;
+}
+
 function getOptionLive(symbol) { return optionLive.get(symbol) || null; }
 function finite(v) { return v!==null && v!==undefined && v!=="" && Number.isFinite(Number(v)); }
 function round(n, digits = 2) {
@@ -400,4 +530,4 @@ function start(market, symbols, round, broadcast) {
   stockSymbols = new Set(Object.keys(symbols));
   connectStock();
 }
-module.exports = { refreshMarket, start, getOptionChain, getExpirations, getNews, publicStock, getOptionLive, getAssets, getStockQuote };
+module.exports = { refreshMarket, start, getOptionChain, getExpirations, getNews, publicStock, getOptionLive, getAssets, getStockQuote, getRadar };
