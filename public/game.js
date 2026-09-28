@@ -112,4 +112,30 @@ async function drawer(screen){
 $("symbol").onchange=e=>selectSymbol(e.target.value);$("tickerSearch").oninput=()=>populate();$("tickerSearch").onkeydown=e=>{if(e.key==="Enter"){const first=$("symbol").options[0];if(first)selectSymbol(first.value)}};$("expirationDates").onchange=e=>{state.expiration=e.target.value;loadChain()};$("refreshOptions").onclick=loadChain;$("buyStock").onclick=()=>orderStock("buy");$("sellStock").onclick=()=>orderStock("sell");$("buyOption").onclick=orderOption;$("closeDrawer").onclick=()=>$("drawer").classList.add("hidden");
 document.querySelectorAll(".ticket-tabs button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".ticket-tabs button").forEach(x=>x.classList.toggle("active",x===b));$("stockTicket").hidden=b.dataset.tab!=="stock";$("optionTicket").hidden=b.dataset.tab!=="option"});
 document.querySelectorAll(".bottom-nav button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".bottom-nav button").forEach(x=>x.classList.toggle("active",x===b));drawer(b.dataset.screen)});
-$("nameBtn").onclick=()=>{const n=window.prompt("Trader name",state.player?.name||"Trader");if(n)send({type:"hello",name:n})};window.addEventListener("resize",renderChart);bootstrap();
+async function accountAction(kind){
+  const username=$("accountUsername").value.trim(),code=$("accountCode").value.trim();
+  if(!username||code.length<6){$("accountStatus").textContent="Enter a username and a login code (6+ characters).";return}
+  $("accountStatus").textContent=kind==="createAccount"?"Creating login…":"Logging in…";
+  try{
+    const d=await api("/api/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({type:kind,playerId,username,code,watchlist:watchlist()})});
+    localStorage.setItem("marketCityPlayerId",d.playerId);
+    if(d.player){state.player=d.player;state.watchlist=Array.isArray(d.player.watchlist)?d.player.watchlist:watchlist();state.market=state.market.filter(x=>watchHas(x.symbol));}
+    $("accountModal").classList.add("hidden");$("accountStatus").textContent="";
+    if(ws)try{ws.close()}catch{}
+    connect();renderAll();loadExpirations();
+  }catch(e){$("accountStatus").textContent=e.message}
+}
+function openAccount(){
+  $("accountModal").classList.remove("hidden");
+  $("accountUsername").value=state.player?.username||state.player?.name||"";
+  $("accountCode").value="";
+  $("accountStatus").textContent=state.player?.username?"Market Watch is saved to this login.":"Create a login to save Market Watch.";
+  $("logoutBtn").hidden=!state.player?.username;
+}
+function logout(){localStorage.removeItem("marketCityPlayerId");location.reload()}
+$("nameBtn").onclick=openAccount;
+$("closeAccount").onclick=()=>$("accountModal").classList.add("hidden");
+$("createAccount").onclick=()=>accountAction("createAccount");
+$("loginAccount").onclick=()=>accountAction("login");
+$("logoutBtn").onclick=logout;
+$("accountCode").onkeydown=e=>{if(e.key==="Enter")accountAction("login")};window.addEventListener("resize",renderChart);bootstrap();
