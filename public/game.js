@@ -131,12 +131,13 @@ function populateSymbols(){
 function selectedStock(){ return state.market.find(s=>s.symbol===state.selected); }
 function formatExpiration(ts){return new Date(ts).toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"});}
 function daysToExpiration(ts){return Math.max(0,Math.ceil((ts-Date.now())/86400000));}
-function renderExpirationDates(){const ex=[...new Set(state.options.map(o=>o.expiration))].sort((a,b)=>a-b);expirationEl.innerHTML=ex.map((ts,i)=>`<button class="expiration-btn ${i===0?"active":""}" data-exp="${ts}"><b>${formatExpiration(ts)}</b><small>${daysToExpiration(ts)} days</small></button>`).join("");expirationEl.querySelectorAll(".expiration-btn").forEach(b=>b.onclick=()=>{expirationEl.querySelectorAll(".expiration-btn").forEach(x=>x.classList.remove("active"));b.classList.add("active");renderOptionChain(Number(b.dataset.exp));});}
+function renderExpirationDates(){const ex=[...new Set(state.options.map(o=>o.expiration))].sort((a,b)=>a-b);expirationEl.innerHTML=ex.map((ts,i)=>`<button class="expiration-btn ${i===0?"active":""}" data-exp="${ts}"><b>${formatExpiration(ts)}</b><small>${daysToExpiration(ts)} days</small></button>`).join("");expirationEl.querySelectorAll(".expiration-btn").forEach(b=>b.onclick=()=>{expirationEl.querySelectorAll(".expiration-btn").forEach(x=>x.classList.remove("active"));b.classList.add("active");renderOptionChain(Number(b.dataset.exp));});if(ex.length)renderOptionChain(ex[0]);}
 function renderOptionChain(expiration){
   const rows=state.options.filter(o=>!expiration||o.expiration===expiration).sort((a,b)=>a.strike-b.strike);
   if(!rows.length){chainEl.innerHTML='<div class="chain-loading">No option contracts available.</div>';return;}
   const strikes=[...new Set(rows.map(o=>o.strike))], spot=Number(selectedStock()?.price);
   const fmt=n=>Number.isFinite(Number(n))?Number(n).toFixed(2):"—";
+  const greek=n=>Number.isFinite(Number(n))?Number(n).toFixed(3):"—";
   const cls=n=>Number(n)>0?"positive":Number(n)<0?"negative":"muted";
   const selectedExp=expiration||rows[0].expiration, expLabel=formatExpiration(selectedExp);
   const htmlRows=strikes.map(k=>{
@@ -146,12 +147,12 @@ function renderOptionChain(expiration){
       `<td class="call-cell" data-contract="${c.id}">${fmt(c.last ?? c.mid)}</td>`,
       `<td class="call-cell" data-contract="${c.id}">${fmt(c.bid)}</td>`,
       `<td class="call-cell" data-contract="${c.id}">${fmt(c.ask)}</td>`,
-      `<td class="call-cell ${cls(c.delta)}" data-contract="${c.id}">${c.delta}</td>`,
+      `<td class="call-cell ${cls(c.delta)}" data-contract="${c.id}">${greek(c.delta)}</td>`,
       `<td class="call-cell muted" data-contract="${c.id}">${c.volume == null ? "—" : c.volume}</td>`,
       `<td class="call-cell muted" data-contract="${c.id}">${c.openInterest == null ? "—" : c.openInterest}</td>`
     ].join(""):'<td colspan="6" class="muted">—</td>';
     const put=p?[
-      `<td class="put-cell ${cls(p.delta)}" data-contract="${p.id}">${p.delta}</td>`,
+      `<td class="put-cell ${cls(p.delta)}" data-contract="${p.id}">${greek(p.delta)}</td>`,
       `<td class="put-cell muted" data-contract="${p.id}">${p.volume == null ? "—" : p.volume}</td>`,
       `<td class="put-cell muted" data-contract="${p.id}">${p.openInterest == null ? "—" : p.openInterest}</td>`,
       `<td class="put-cell" data-contract="${p.id}">${fmt(p.bid)}</td>`,
@@ -176,7 +177,7 @@ function selectOptionContract(id){
   chainEl.querySelectorAll("[data-contract='"+id+"']").forEach(x=>x.classList.add("chain-selected"));
   $("optionsTab").hidden=false; $("stockTab").hidden=true;
   document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab==="options"));
-  toast(`${o.symbol} ${o.strike} ${o.type.toUpperCase()} selected · ask ${money(o.ask)}`);
+  toast(`${o.symbol} ${o.strike} ${o.type.toUpperCase()} selected · ask ${o.ask == null ? "—" : money(o.ask)}`);
 }
 
 async function loadOptions(){
@@ -190,7 +191,7 @@ async function loadOptions(){
   renderOptionInfo();
 }
 
-function renderOptionInfo(){const o=state.options[Number($("contract").value)||0];if(!o){$("greeks").textContent="No option chain";return;}$("greeks").innerHTML=`EXP ${formatExpiration(o.expiration)} · ${daysToExpiration(o.expiration)} days<br>Δ ${o.delta} · Γ ${o.gamma}<br>Θ ${o.theta} · Vega ${o.vega}<br>100 shares/contract · virtual pricing`;}
+function renderOptionInfo(){const o=state.options[Number($("contract").value)||0];if(!o){$("greeks").textContent="No option chain";return;}$("greeks").innerHTML=`EXP ${formatExpiration(o.expiration)} · ${daysToExpiration(o.expiration)} days<br>Δ ${greek(o.delta)} · Γ ${greek(o.gamma)}<br>Θ ${greek(o.theta)} · Vega ${greek(o.vega)}<br>100 shares/contract · REAL ALPACA DATA`;}
 function selectSymbol(sym){
   const symbolChanged = state.selected !== sym;
   state.selected=sym;
@@ -215,7 +216,7 @@ function selectSymbol(sym){
   }
   const updated=s.lastTradeAt?new Date(s.lastTradeAt).toLocaleTimeString():"waiting";
   const changeText=s.change==null?"—":`${s.change>=0?"+":""}${money(s.change)} (${s.changePct>=0?"+":""}${s.changePct}%)`;
-  $("quote").innerHTML=`<div class="quote-price">${s.price==null?"Waiting…":money(s.price)}</div><div class="quote-change ${cls}">${changeText}</div>${chart}<div class="quote-meta">REAL MARKET DATA · updated ${updated}</div>`;
+  $("quote").innerHTML=`<div class="quote-price">${s.price==null?"Waiting for real quote…":money(s.price)}</div><div class="quote-change ${cls}">${changeText}</div>${chart}<div class="quote-meta">REAL MARKET DATA · updated ${updated}</div>`;
   if (symbolChanged || optionsLoadedFor !== sym) loadOptions().catch(err => console.error("Options chain load failed:", err));
 }
 
