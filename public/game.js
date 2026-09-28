@@ -1,8 +1,11 @@
 const $=id=>document.getElementById(id);
-const state={player:null,market:[],assets:[],selected:"AAPL",options:[],expirations:[],expiration:"",selectedContract:null,leaderboard:[],online:0,marketReady:false,watchlist:null};
+const state={player:null,market:[],assets:[],selected:"AAPL",options:[],expirations:[],expiration:"",selectedContract:null,leaderboard:[],online:0,marketReady:false,watchlist:null,optionWatchlist:null};
 let ws=null,reconnectTimer=null,chainSeq=0;
 const DEFAULT_WATCHLIST=["AAPL","MSFT","NVDA","AMZN","TSLA","GOOGL","META","JPM"];
 function watchlist(){if(state.watchlist===null){try{const x=JSON.parse(localStorage.getItem("marketCityWatchlist")||"null");state.watchlist=Array.isArray(x)&&x.length?x.map(String):[...DEFAULT_WATCHLIST]}catch{state.watchlist=[...DEFAULT_WATCHLIST]}}return state.watchlist}
+function optionWatchlist(){if(state.optionWatchlist===null){try{const x=JSON.parse(localStorage.getItem("marketCityOptionWatchlist")||"[]");state.optionWatchlist=Array.isArray(x)?x:[]}catch{state.optionWatchlist=[]}}return state.optionWatchlist}
+function saveOptionWatchlist(){localStorage.setItem("marketCityOptionWatchlist",JSON.stringify(optionWatchlist()))}
+function optionWatchHas(symbol){return optionWatchlist().some(x=>x.contractSymbol===symbol)}
 function watchHas(symbol){return watchlist().includes(String(symbol||"").toUpperCase())}
 function saveWatchlistLocal(){localStorage.setItem("marketCityWatchlist",JSON.stringify(watchlist()))}
 function saveWatchlistRemote(){if(state.player?.username&&ws?.readyState===WebSocket.OPEN)send({type:"saveWatchlist",watchlist:watchlist()})}
@@ -29,26 +32,41 @@ function stock(){return state.market.find(x=>x.symbol===state.selected)}
 function populate(){const s=$("symbol");const q=String($("tickerSearch")?.value||"").trim().toLowerCase();const list=(state.assets.length?state.assets:state.market).filter(x=>!q||x.symbol.toLowerCase().includes(q)||String(x.name||"").toLowerCase().includes(q));s.innerHTML=list.map(x=>'<option value="'+esc(x.symbol)+'">'+esc(x.symbol)+" — "+esc(x.name)+"</option>").join("");s.value=state.selected}
 function renderHeader(){const p=state.player;if(!p)return;$("cash").textContent=money(p.cash);$("portfolio").textContent=money(p.portfolioValue);$("level").textContent=p.level;$("nameBtn").textContent=p.name||"GUEST"}
 function renderWatchlist(){
-  $("watchlist").innerHTML=state.market.map(s=>{
+  const stocks=state.market.map(s=>{
     const c=s.changePct>0?"up":s.changePct<0?"down":"flat";
     return '<div class="watch-row '+(s.symbol===state.selected?"active":"")+'">'+
       '<button class="watch-main" data-symbol="'+esc(s.symbol)+'"><span><span class="sym">'+esc(s.symbol)+'</span><span class="name">'+esc(s.name)+'</span></span>'+
       '<span class="px"><span class="price">'+px(s.price)+'</span><span class="'+c+'">'+(s.changePct==null?"—":(s.changePct>=0?"+":"")+Number(s.changePct).toFixed(2)+"%")+'</span></span></button>'+
-      '<button class="watch-remove" data-remove="'+esc(s.symbol)+'" title="Remove '+esc(s.symbol)+'" aria-label="Remove '+esc(s.symbol)+'">×</button>'+
-      '</div>';
+      '<button class="watch-remove" data-remove="'+esc(s.symbol)+'" title="Remove '+esc(s.symbol)+'" aria-label="Remove '+esc(s.symbol)+'">×</button></div>';
   }).join("");
-  document.querySelectorAll(".watch-main").forEach(b=>b.onclick=()=>selectSymbol(b.dataset.symbol));
-  document.querySelectorAll(".watch-remove").forEach(b=>b.onclick=e=>{
+  const options=optionWatchlist().map(o=>{
+    const c=o.type==="call"?"up":"down";
+    const observed=o.ask!=null?o.ask:(o.last!=null?o.last:o.bid);
+    return '<div class="watch-row option-watch-row">'+
+      '<button class="watch-main option-watch-main" data-option="'+esc(o.contractSymbol)+'"><span><span class="sym">'+esc(o.symbol)+' '+esc((o.type||"").toUpperCase())+'</span><span class="name">'+esc(o.contractSymbol)+'</span></span>'+
+      '<span class="px"><span class="price">'+px(observed)+'</span><span class="'+c+'">'+esc(o.expirationDate||"")+'</span></span></button>'+
+      '<button class="watch-remove option-watch-remove" data-option-remove="'+esc(o.contractSymbol)+'" title="Remove option" aria-label="Remove option">×</button></div>';
+  }).join("");
+  $("watchlist").innerHTML=stocks+options;
+  document.querySelectorAll(".watch-main[data-symbol]").forEach(b=>b.onclick=()=>selectSymbol(b.dataset.symbol));
+  document.querySelectorAll(".option-watch-main").forEach(b=>b.onclick=()=>{
+    const o=optionWatchlist().find(x=>x.contractSymbol===b.dataset.option);
+    if(!o)return;
+    selectSymbol(o.symbol).then(()=>{state.selectedContract=state.options.find(x=>x.contractSymbol===o.contractSymbol)||null;document.querySelectorAll(".ticket-tabs button").forEach(x=>x.classList.toggle("active",x.dataset.tab==="option"));$("stockTicket").hidden=true;$("optionTicket").hidden=false;renderChain();renderOptionTicket()});
+  });
+  document.querySelectorAll(".watch-remove[data-remove]").forEach(b=>b.onclick=e=>{
     e.stopPropagation();
     const symbol=b.dataset.remove;
     state.market=state.market.filter(x=>x.symbol!==symbol);
     state.watchlist=watchlist().filter(x=>x!==symbol);saveWatchlistLocal();saveWatchlistRemote();
-    if(state.selected===symbol){
-      state.selected=state.market[0]?.symbol||"";
-      if(state.selected) selectSymbol(state.selected);
-    }
+    if(state.selected===symbol){state.selected=state.market[0]?.symbol||"";if(state.selected)selectSymbol(state.selected)}
     renderWatchlist();
-    if(!state.market.length) toast("Market Watch is empty. Search for a stock to add it.");
+    if(!state.market.length&&!optionWatchlist().length)toast("Market Watch is empty. Search for a stock or add an option.");
+  });
+  document.querySelectorAll(".option-watch-remove").forEach(b=>b.onclick=e=>{
+    e.stopPropagation();
+    state.optionWatchlist=optionWatchlist().filter(x=>x.contractSymbol!==b.dataset.optionRemove);
+    saveOptionWatchlist();renderWatchlist();
   });
 }
 function renderQuote(){const s=stock();if(!s)return;$("selectedSymbol").textContent=s.symbol;$("selectedName").textContent=s.name;$("selectedPrice").textContent=px(s.price);$("bid").textContent=px(s.bid);$("ask").textContent=px(s.ask);$("change").textContent=s.change==null?"—":px(s.change)+" "+(s.changePct>=0?"+":"")+Number(s.changePct||0).toFixed(2)+"%";$("change").className=s.change>0?"up":s.change<0?"down":"";$("prevClose").textContent=px(s.previousClose);$("feed").textContent=s.stream?"IEX STREAM":"IEX SNAPSHOT";$("optionSource").textContent="Alpaca "+(s.stream?"live stream":"latest snapshot")+" · real data"}
@@ -63,7 +81,20 @@ function renderChain(){const calls=new Map(state.options.filter(x=>x.type==="cal
  const labels=["LAST","BID","ASK","DELTA","GAMMA","THETA","VEGA","IV","VOL","OI"];
  const heads=labels.map(x=>'<th>'+x+'</th>').join("");
  $("optionChain").innerHTML='<table class="chain-table"><thead><tr><th colspan="10" class="call">CALLS</th><th rowspan="2">STRIKE</th><th colspan="10" class="put">PUTS</th></tr><tr>'+heads+'<th class="strike-head"></th>'+heads+'</tr></thead><tbody>'+strikes.map(s=>'<tr class="'+(s===atm?"atm":"")+'">'+cell(calls.get(s),"call")+'<td class="strike">'+px(s)+'</td>'+cell(puts.get(s),"put")+'</tr>').join("")+'</tbody></table>';document.querySelectorAll("[data-contract]").forEach(e=>e.onclick=()=>selectContract(e.dataset.contract))}
-function selectContract(s){state.selectedContract=state.options.find(x=>x.contractSymbol===s)||null;document.querySelectorAll(".ticket-tabs button").forEach(x=>x.classList.toggle("active",x.dataset.tab==="option"));$("stockTicket").hidden=true;$("optionTicket").hidden=false;renderChain();renderOptionTicket()}
+function selectContract(s){
+  state.selectedContract=state.options.find(x=>x.contractSymbol===s)||null;
+  if(state.selectedContract&&!optionWatchHas(state.selectedContract.contractSymbol)){
+    const o=state.selectedContract;
+    optionWatchlist().push({
+      contractSymbol:o.contractSymbol,symbol:o.symbol,type:o.type,strike:o.strike,
+      expirationDate:o.expirationDate,ask:o.ask,bid:o.bid,last:o.last
+    });
+    saveOptionWatchlist();
+    toast("Option added to Market Watch");
+  }
+  document.querySelectorAll(".ticket-tabs button").forEach(x=>x.classList.toggle("active",x.dataset.tab==="option"));
+  $("stockTicket").hidden=true;$("optionTicket").hidden=false;renderChain();renderOptionTicket();renderWatchlist();
+}
 function renderOptionTicket(){const o=state.selectedContract;if(!o){$("selectedContract").textContent="Select a call or put in the chain.";$("optionDetails").innerHTML="";return}$("selectedContract").innerHTML="<b>"+esc(o.contractSymbol)+"</b><br>Bid "+px(o.bid)+" · Ask "+px(o.ask)+" · Last "+px(o.last);$("optionDetails").innerHTML="Delta "+num(o.delta)+" · Gamma "+num(o.gamma)+" · Theta "+num(o.theta)+" · Vega "+num(o.vega)+"<br>IV "+(o.iv==null?"—":Number(o.iv).toFixed(2)+"%")+" · Volume "+(o.volume==null?"—":Number(o.volume).toLocaleString())+" · OI "+(o.openInterest==null?"—":Number(o.openInterest).toLocaleString())}
 function renderAll(){populate();renderHeader();renderWatchlist();renderQuote();renderChart();renderTicket();renderChain();renderOptionTicket()}
 function orderStock(side){send({type:"stockOrder",symbol:state.selected,side,quantity:Math.floor(Number($("shares").value))})}
