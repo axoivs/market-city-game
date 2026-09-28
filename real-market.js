@@ -477,9 +477,13 @@ async function getRadar() {
           const changePct = finite(previousClose) && previousClose > 0
             ? round(((price - previousClose) / previousClose) * 100, 2) : null;
 
-          const trendScore = finite(changePct)
+          // Alpaca can omit the previous daily bar for some symbols/feeds.
+          // When that happens, use the real intraday move as the trend signal
+          // instead of turning every stock into an unclassified MIXED row.
+          const signalPct = finite(changePct) ? changePct : intradayPct;
+          const trendScore = finite(signalPct)
             ? round(clamp(
-                50 + changePct * 8 + (finite(intradayPct) ? intradayPct * 4 : 0),
+                50 + signalPct * 8 + (finite(intradayPct) ? intradayPct * 4 : 0),
                 0, 100
               ), 1)
             : 50;
@@ -492,7 +496,7 @@ async function getRadar() {
             price: round(price),
             bid: finite(bid) && bid > 0 ? round(bid) : null,
             ask: finite(ask) && ask > 0 ? round(ask) : null,
-            changePct,
+            changePct: finite(changePct) ? changePct : signalPct,
             intradayPct,
             volume: finite(volume) && volume >= 0 ? volume : null,
             trend: trendScore >= 58 ? "UP" : trendScore <= 42 ? "DOWN" : "MIXED",
@@ -520,6 +524,7 @@ async function getRadar() {
 
   const optionTargets = rows
     .filter(x => x.hasOptions && finite(x.changePct))
+    .sort((a,b) => Math.abs(b.changePct) - Math.abs(a.changePct))
     .slice(0, RADAR_OPTION_TARGETS);
 
   const setups = [];
