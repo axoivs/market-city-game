@@ -80,7 +80,9 @@ function connectStock() {
     try {
       const msgs = JSON.parse(raw.toString());
       for (const msg of msgs) {
-        if (msg.T === "success" && msg.msg === "authenticated") {
+        if (msg.T === "error") {
+          console.error("Alpaca stock stream error:", msg.code, msg.msg);
+        } else if (msg.T === "success" && msg.msg === "authenticated") {
           stockWs.send(JSON.stringify({ action: "subscribe", trades: [...stockSymbols], quotes: [...stockSymbols], bars: [...stockSymbols] }));
         } else if (msg.T === "t" || msg.T === "q" || msg.T === "b" || msg.T === "d" || msg.T === "u") {
           applyStock(msg);
@@ -130,7 +132,9 @@ function connectOptions() {
       const msgs = Array.isArray(decoded) ? decoded : [decoded];
       for (const msg of msgs) {
         if (!msg || typeof msg !== "object") continue;
-        if (msg.T === "success" && msg.msg === "authenticated") {
+        if (msg.T === "error") {
+          console.error("Alpaca option stream error:", msg.code, msg.msg);
+        } else if (msg.T === "success" && msg.msg === "authenticated") {
           if (optionSymbols.size) subscribeOptions([...optionSymbols]);
         } else if (msg.T === "q" || msg.T === "t") {
           applyOption(msg);
