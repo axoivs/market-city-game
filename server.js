@@ -345,10 +345,14 @@ function marketPayload() {
   return Object.values(market).map(stock => ({
     symbol: stock.symbol,
     name: stock.name,
-    price: round(stock.price),
-    change: stock.change,
-    changePct: stock.changePct,
-    history: stock.history
+    price: stock.price == null ? null : round(stock.price),
+    open: stock.open == null ? null : round(stock.open),
+    previousClose: stock.previousClose == null ? null : round(stock.previousClose),
+    change: stock.change == null ? null : round(stock.change),
+    changePct: stock.changePct == null ? null : round(stock.changePct, 2),
+    history: stock.history,
+    lastTradeAt: stock.lastTradeAt,
+    real: true
   }));
 }
 
