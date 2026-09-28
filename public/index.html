@@ -8,7 +8,7 @@
 <div id="app">
 <header class="topbar">
   <div class="brand"><span class="brand-mark">◆</span><strong>MARKET CITY</strong><span class="live-badge">ALPACA LIVE</span></div>
-  <div class="session"><span id="marketState" class="market-state">CONNECTING</span><span>Cash <b id="cash">$100,000.00</b></span><span>Portfolio <b id="portfolio">$100,000.00</b></span><span>Level <b id="level">1</b></span><button id="nameBtn" class="ghost">Trader</button></div>
+  <div class="session"><span id="marketState" class="market-state">CONNECTING</span><span>Cash <b id="cash">$100,000.00</b></span><span>Portfolio <b id="portfolio">$100,000.00</b></span><span>Level <b id="level">1</b></span><button id="nameBtn" class="ghost">LOGIN / SAVE</button></div>
 </header>
 
 <main class="terminal">
@@ -59,7 +59,7 @@
 
 <nav class="bottom-nav"><button class="active" data-screen="profile">PROFILE</button><button data-screen="news">NEWS</button><button data-screen="radar">RADAR</button><button data-screen="missions">MISSIONS</button><button data-screen="leaderboard">LEADERBOARD</button></nav>
 <section id="drawer" class="drawer hidden"><div class="drawer-head"><h2 id="drawerTitle"></h2><button id="closeDrawer">×</button></div><div id="drawerContent"></div></section>
-<div id="toast" class="toast"></div>
+<div id="accountModal" class="account-modal hidden"><div class="account-card"><div class="account-head"><div><div class="eyebrow">PLAYER ACCOUNT</div><h2>LOGIN & SAVE MARKET WATCH</h2></div><button id="closeAccount" class="account-close">×</button></div><p class="account-copy">Every new visitor gets a random trader name. Create a login to keep your Market Watch saved when you return.</p><label>Username<input id="accountUsername" maxlength="24" autocomplete="username"></label><label>Login code<input id="accountCode" minlength="6" autocomplete="off" placeholder="6+ characters"></label><div class="account-actions"><button id="loginAccount" class="ghost">LOGIN</button><button id="createAccount" class="buy">CREATE LOGIN</button></div><button id="logoutBtn" class="ghost account-logout" hidden>LOG OUT</button><div id="accountStatus" class="account-status"></div></div></div><div id="toast" class="toast"></div>
 </div>
 <script src="/game.js"></script>
 </body>
