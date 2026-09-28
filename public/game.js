@@ -2,7 +2,17 @@ const canvas = document.getElementById("game");
 const ctx = canvas.getContext("2d");
 let playerId = localStorage.getItem("marketCityPlayerId");
 if (!playerId) {
-  playerId = crypto.randomUUID();
+  if (globalThis.crypto?.randomUUID) {
+    playerId = crypto.randomUUID();
+  } else if (globalThis.crypto?.getRandomValues) {
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    playerId = [...bytes].map((b,i) => ([4,6,8,10].includes(i) ? "-" : "") + b.toString(16).padStart(2,"0")).join("");
+  } else {
+    playerId = "player-" + Date.now().toString(36) + "-" + Math.random().toString(36).slice(2);
+  }
   localStorage.setItem("marketCityPlayerId", playerId);
 }
 const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "?playerId=" + encodeURIComponent(playerId));
@@ -180,5 +190,11 @@ document.querySelectorAll(".menu-btn").forEach(btn=>btn.onclick=()=>{
 });
 
 setInterval(()=>{ if(state.player) send({type:"move",x:state.player.x,y:state.player.y}); },1000);
-loadOptions();
+drawCity();
+
+loadOptions().catch(err => {
+  console.error("Market City option chain failed:", err);
+  $("greeks").textContent = "Options unavailable until the server connection is ready.";
+});
+
 requestAnimationFrame(loop);
