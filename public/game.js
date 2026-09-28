@@ -67,9 +67,63 @@ function selectedStock(){ return state.market.find(s=>s.symbol===state.selected)
 function formatExpiration(ts){return new Date(ts).toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"});}
 function daysToExpiration(ts){return Math.max(0,Math.ceil((ts-Date.now())/86400000));}
 function renderExpirationDates(){const ex=[...new Set(state.options.map(o=>o.expiration))].sort((a,b)=>a-b);expirationEl.innerHTML=ex.map((ts,i)=>`<button class="expiration-btn ${i===0?"active":""}" data-exp="${ts}"><b>${formatExpiration(ts)}</b><small>${daysToExpiration(ts)} days</small></button>`).join("");expirationEl.querySelectorAll(".expiration-btn").forEach(b=>b.onclick=()=>{expirationEl.querySelectorAll(".expiration-btn").forEach(x=>x.classList.remove("active"));b.classList.add("active");renderOptionChain(Number(b.dataset.exp));});}
-function renderOptionChain(expiration){const rows=state.options.filter(o=>!expiration||o.expiration===expiration).sort((a,b)=>a.strike-b.strike);if(!rows.length){chainEl.innerHTML='<div class="chain-loading">No option contracts available.</div>';return;}const strikes=[...new Set(rows.map(o=>o.strike))];const spot=Number(selectedStock()?.price);chainEl.innerHTML=`<div class="chain-toolbar"><span>CALLS</span><strong>${state.selected}</strong><span>PUTS</span></div><div class="chain-table-wrap"><table class="chain-table"><thead><tr><th>LAST</th><th>BID</th><th>ASK</th><th>IV</th><th>DELTA</th><th class="strike-head">STRIKE</th><th>DELTA</th><th>IV</th><th>BID</th><th>ASK</th><th>LAST</th></tr></thead><tbody>${strikes.map(k=>{const c=rows.find(o=>o.strike===k&&o.type==="call"),p=rows.find(o=>o.strike===k&&o.type==="put"),atm=Math.abs(spot-k)<Math.max(1,spot*.025);return `<tr class="${atm?"atm":""}"><td>${money(c?.mid)}</td><td>${money(c?.bid)}</td><td>${money(c?.ask)}</td><td>${c?.iv??"—"}%</td><td>${c?.delta??"—"}</td><td class="strike">${k}</td><td>${p?.delta??"—"}</td><td>${p?.iv??"—"}%</td><td>${money(p?.bid)}</td><td>${money(p?.ask)}</td><td>${money(p?.mid)}</td></tr>`}).join("")}</tbody></table></div><div class="chain-note">Calls left · puts right · highlighted rows are near the current stock price. All pricing is virtual.</div>`;}
+function renderOptionChain(expiration){
+  const rows=state.options.filter(o=>!expiration||o.expiration===expiration).sort((a,b)=>a.strike-b.strike);
+  if(!rows.length){chainEl.innerHTML='<div class="chain-loading">No option contracts available.</div>';return;}
+  const strikes=[...new Set(rows.map(o=>o.strike))], spot=Number(selectedStock()?.price);
+  const fmt=n=>Number.isFinite(Number(n))?Number(n).toFixed(2):"—";
+  const cls=n=>Number(n)>0?"positive":Number(n)<0?"negative":"muted";
+  const selectedExp=expiration||rows[0].expiration, expLabel=formatExpiration(selectedExp);
+  const htmlRows=strikes.map(k=>{
+    const c=rows.find(o=>o.strike===k&&o.type==="call"), p=rows.find(o=>o.strike===k&&o.type==="put");
+    const atm=Math.abs(spot-k)<Math.max(1,spot*.0125);
+    const call=c?[
+      `<td class="call-cell" data-contract="${c.id}">${fmt(c.last ?? c.mid)}</td>`,
+      `<td class="call-cell" data-contract="${c.id}">${fmt(c.bid)}</td>`,
+      `<td class="call-cell" data-contract="${c.id}">${fmt(c.ask)}</td>`,
+      `<td class="call-cell" data-contract="${c.id}">${c.iv}%</td>`,
+      `<td class="call-cell ${cls(c.delta)}" data-contract="${c.id}">${c.delta}</td>`,
+      `<td class="call-cell muted" data-contract="${c.id}">${c.volume??0}</td>`,
+      `<td class="call-cell muted" data-contract="${c.id}">${c.openInterest??0}</td>`
+    ].join(""):'<td colspan="7" class="muted">—</td>';
+    const put=p?[
+      `<td class="put-cell ${cls(p.delta)}" data-contract="${p.id}">${p.delta}</td>`,
+      `<td class="put-cell" data-contract="${p.id}">${p.iv}%</td>`,
+      `<td class="put-cell muted" data-contract="${p.id}">${p.volume??0}</td>`,
+      `<td class="put-cell muted" data-contract="${p.id}">${p.openInterest??0}</td>`,
+      `<td class="put-cell" data-contract="${p.id}">${fmt(p.bid)}</td>`,
+      `<td class="put-cell" data-contract="${p.id}">${fmt(p.ask)}</td>`,
+      `<td class="put-cell" data-contract="${p.id}">${fmt(p.last ?? p.mid)}</td>`
+    ].join(""):'<td colspan="7" class="muted">—</td>';
+    return `<tr class="${atm?"atm":""}" data-strike="${k}">${call}<td class="strike">${k}</td>${put}</tr>`;
+  }).join("");
+  chainEl.innerHTML=`
+    <div class="chain-table-wrap"><table class="chain-table">
+      <thead><tr><th colspan="7" class="call-group">CALLS · ${expLabel}</th><th class="strike-head">STRIKE</th><th colspan="7" class="put-group">PUTS · ${expLabel}</th></tr>
+      <tr><th>LAST</th><th>BID</th><th>ASK</th><th>IV</th><th>DELTA</th><th>VOL</th><th>OPEN INT</th><th class="strike-head">STRIKE</th><th>DELTA</th><th>IV</th><th>VOL</th><th>OPEN INT</th><th>BID</th><th>ASK</th><th>LAST</th></tr></thead>
+      <tbody>${htmlRows}</tbody></table></div>
+    <div class="chain-note"><span>Calls left · puts right · click any contract to load it into the Trading Desk.</span><span>${strikes.length} strikes · ${rows.length} contracts · virtual pricing</span></div>`;
+  $("chainSpot").textContent=`${state.selected} ${spot?money(spot):"—"}`;
+  chainEl.querySelectorAll("[data-contract]").forEach(cell=>cell.addEventListener("click",()=>selectOptionContract(cell.dataset.contract)));
+}
+function selectOptionContract(id){
+  const index=state.options.findIndex(o=>o.id===id); if(index<0)return;
+  $("contract").value=String(index); const o=state.options[index]; renderOptionInfo();
+  chainEl.querySelectorAll(".chain-selected").forEach(x=>x.classList.remove("chain-selected"));
+  chainEl.querySelectorAll("[data-contract='"+id+"']").forEach(x=>x.classList.add("chain-selected"));
+  $("optionsTab").hidden=false; $("stockTab").hidden=true;
+  document.querySelectorAll(".tab").forEach(x=>x.classList.toggle("active",x.dataset.tab==="options"));
+  toast(`${o.symbol} ${o.strike} ${o.type.toUpperCase()} selected · ask ${money(o.ask)}`);
+}
 
-async function loadOptions(){const r=await fetch("/api/options?symbol="+encodeURIComponent(state.selected));const data=await r.json();state.options=data.chain||[];renderExpirationDates();renderOptionChain();$("contract").innerHTML=state.options.map((o,i)=>`<option value="${i}">${o.type.toUpperCase()} ${o.strike} · ${formatExpiration(o.expiration)} · ask ${money(o.ask)}</option>`).join("");renderOptionInfo();}
+async function loadOptions(){
+  const r=await fetch("/api/options?symbol="+encodeURIComponent(state.selected)+"&_="+Date.now(),{cache:"no-store"});
+  const data=await r.json(); state.options=data.chain||[];
+  renderExpirationDates(); renderOptionChain();
+  $("contract").innerHTML=state.options.map((o,i)=>`<option value="${i}">${o.type.toUpperCase()} ${o.strike} · ${formatExpiration(o.expiration)} · ask ${money(o.ask)}</option>`).join("");
+  renderOptionInfo();
+}
+
 function renderOptionInfo(){const o=state.options[Number($("contract").value)||0];if(!o){$("greeks").textContent="No option chain";return;}$("greeks").innerHTML=`EXP ${formatExpiration(o.expiration)} · ${daysToExpiration(o.expiration)} days<br>IV ${o.iv}% · Δ ${o.delta} · Γ ${o.gamma}<br>Θ ${o.theta} · Vega ${o.vega}<br>100 shares/contract · virtual pricing`;}
 function selectSymbol(sym){
   state.selected=sym;
@@ -215,6 +269,7 @@ ws.addEventListener("message",e=>{
 });
 ws.addEventListener("close",()=>toast("Server connection lost — refreshing connection..."));
 $("symbol").onchange=e=>selectSymbol(e.target.value);
+$("chainRefresh").onclick=()=>loadOptions().then(()=>toast("Options chain refreshed")).catch(()=>toast("Unable to refresh options chain"));
 $("contract").onchange=renderOptionInfo;
 $("buyStock").onclick=()=>send({type:"stockOrder",symbol:state.selected,side:"buy",quantity:Number($("shares").value)});
 $("sellStock").onclick=()=>send({type:"stockOrder",symbol:state.selected,side:"sell",quantity:Number($("shares").value)});
