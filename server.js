@@ -168,7 +168,10 @@ const server=http.createServer(async(req,res)=>{
       return respond(res,200,{symbol,...result,source:"Alpaca/"+(process.env.ALPACA_OPTION_FEED||"indicative")});
     }
     if(u.pathname==="/api/radar") { const radar=await real.getRadar(); return respond(res,200,{...radar,source:"Alpaca"}); }
-    if(u.pathname==="/api/outlook") return respond(res,200,await real.get30DayOutlook());
+    if(u.pathname==="/api/outlook") {
+      const requested=Number(u.searchParams.get("days")||30);
+      return respond(res,200,await real.getOutlook(requested));
+    }
     if(u.pathname==="/api/unusual-volume") return respond(res,200,await real.getUnusualOptionVolume());
     if(u.pathname==="/api/news"){
       const symbol=(u.searchParams.get("symbol")||"").toUpperCase();
