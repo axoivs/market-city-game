@@ -41,7 +41,26 @@ function renderOptionTicket(){const o=state.selectedContract;if(!o){$("selectedC
 function renderAll(){populate();renderHeader();renderWatchlist();renderQuote();renderChart();renderTicket();renderChain();renderOptionTicket()}
 function orderStock(side){send({type:"stockOrder",symbol:state.selected,side,quantity:Math.floor(Number($("shares").value))})}
 function orderOption(){const o=state.selectedContract;if(!o)return toast("Select an option contract first.");send({type:"optionOrder",symbol:o.symbol,type:o.type,contractSymbol:o.contractSymbol,quantity:Math.floor(Number($("contracts").value)),expirationDate:o.expirationDate})}
-async function drawer(screen){const d=$("drawer"),b=$("drawerContent");d.classList.remove("hidden");$("drawerTitle").textContent=screen.toUpperCase();if(screen==="portfolio"){const p=state.player||{};b.innerHTML='<div class="drawer-body"><h3>Cash '+money(p.cash)+' · Portfolio '+money(p.portfolioValue)+'</h3>'+Object.entries(p.positions||{}).map(([s,q])=>'<div class="holding"><span>'+esc(s)+'</span><b>'+q+' shares</b></div>').join("")+(p.options||[]).map(o=>'<div class="holding"><span>'+esc(o.contractSymbol)+'</span><b>'+o.quantity+' contracts</b></div>').join("")+'</div>'}else if(screen==="news"){b.innerHTML='<div class="drawer-body">Loading Alpaca news…</div>';try{const m=await api("/api/news?symbol="+encodeURIComponent(state.selected));b.innerHTML='<div class="drawer-body">'+(m.news||[]).map(n=>'<div class="news-item"><b>'+esc(n.headline)+'</b><small>'+esc(n.source||"Alpaca")+" · "+new Date(n.createdAt).toLocaleString()+"</small><p>"+esc(n.summary||"")+'</p></div>').join("")+"</div>"}catch(e){b.innerHTML='<div class="drawer-body">'+esc(e.message)+"</div>"}}else if(screen==="missions"){const m=state.player?.missions||{};b.innerHTML='<div class="drawer-body">'+[["firstTrade","Complete your first trade"],["cityTour","Explore Market City"],["profitGoal","Reach $110,000 portfolio value"]].map(x=>'<div class="mission"><span>'+x[1]+'</span><b>'+(m[x[0]]?"DONE":"OPEN")+"</b></div>").join("")+"</div>"}else{b.innerHTML='<div class="drawer-body">'+(state.leaderboard||[]).map((x,i)=>'<div class="holding"><span>#'+(i+1)+" "+esc(x.name)+" · Level "+x.level+"</span><b>"+money(x.value)+"</b></div>").join("")+"</div>"}}
+async function drawer(screen){
+  const d=$("drawer"),b=$("drawerContent");
+  d.classList.remove("hidden");
+  $("drawerTitle").textContent=screen==="radar"?"MARKET RADAR":screen.toUpperCase();
+  if(screen==="profile"){
+    const p=state.player||{};
+    b.innerHTML='<div class="drawer-body profile-grid"><h3>'+esc(p.name||"Trader")+'</h3><div class="metric-grid"><div><small>CASH</small><b>'+money(p.cash)+'</b></div><div><small>PORTFOLIO</small><b>'+money(p.portfolioValue)+'</b></div><div><small>LEVEL</small><b>'+(p.level||1)+'</b></div><div><small>XP</small><b>'+(p.xp||0)+'</b></div></div><h3>Holdings</h3>'+
+      Object.entries(p.positions||{}).map(([s,q])=>'<div class="holding"><span>'+esc(s)+'</span><b>'+q+' shares</b></div>').join("")+
+      (p.options||[]).map(o=>'<div class="holding"><span>'+esc(o.contractSymbol)+'</span><b>'+o.quantity+' contracts</b></div>').join("")+
+      '</div>';
+  }else if(screen==="news"){
+    b.innerHTML='<div class="drawer-body">Loading Alpaca news…</div>';
+    try{const m=await api("/api/news?symbol="+encodeURIComponent(state.selected));b.innerHTML='<div class="drawer-body">'+(m.news||[]).map(n=>'<div class="news-item"><b>'+esc(n.headline)+'</b><small>'+esc(n.source||"Alpaca")+" · "+new Date(n.createdAt).toLocaleString()+'</small><p>'+esc(n.summary||"")+'</p></div>').join("")+'</div>'}catch(e){b.innerHTML='<div class="drawer-body">'+esc(e.message)+'</div>'}
+  }else if(screen==="missions"){
+    const m=state.player?.missions||{};
+    b.innerHTML='<div class="drawer-body">'+[["firstTrade","Complete your first trade"],["cityTour","Explore Market City"],["profitGoal","Reach $110,000 portfolio value"]].map(x=>'<div class="mission"><span>'+x[1]+'</span><b>'+(m[x[0]]?"DONE":"OPEN")+'</b></div>').join("")+'</div>';
+  }else{
+    b.innerHTML='<div class="drawer-body">'+(state.leaderboard||[]).map((x,i)=>'<div class="holding"><span>#'+(i+1)+" "+esc(x.name)+" · Level "+x.level+'</span><b>'+money(x.value)+'</b></div>').join("")+'</div>';
+  }
+}
 $("symbol").onchange=e=>selectSymbol(e.target.value);$("tickerSearch").oninput=()=>populate();$("tickerSearch").onkeydown=e=>{if(e.key==="Enter"){const first=$("symbol").options[0];if(first)selectSymbol(first.value)}};$("expirationDates").onchange=e=>{state.expiration=e.target.value;loadChain()};$("refreshOptions").onclick=loadChain;$("buyStock").onclick=()=>orderStock("buy");$("sellStock").onclick=()=>orderStock("sell");$("buyOption").onclick=orderOption;$("closeDrawer").onclick=()=>$("drawer").classList.add("hidden");
 document.querySelectorAll(".ticket-tabs button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".ticket-tabs button").forEach(x=>x.classList.toggle("active",x===b));$("stockTicket").hidden=b.dataset.tab!=="stock";$("optionTicket").hidden=b.dataset.tab!=="option"});
 document.querySelectorAll(".bottom-nav button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".bottom-nav button").forEach(x=>x.classList.toggle("active",x===b));drawer(b.dataset.screen)});
