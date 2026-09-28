@@ -141,102 +141,6 @@ function round(n, digits = 2) {
   return Math.round(n * p) / p;
 }
 
-function randomNormal() {
-  let u = 0;
-  let v = 0;
-  while (u === 0) u = Math.random();
-  while (v === 0) v = Math.random();
-  return Math.sqrt(-2 * Math.log(u)) * Math.cos(2 * Math.PI * v);
-}
-
-function tickMarket() {
-  for (const [symbol, stock] of Object.entries(market)) {
-    const info = SYMBOLS[symbol];
-    const shock = randomNormal() * info.volatility;
-    const drift = 0.00005;
-    const old = stock.price;
-    stock.price = Math.max(1, old * Math.exp(drift + shock));
-    stock.change = round(stock.price - stock.previousClose);
-    stock.changePct = round((stock.change / stock.previousClose) * 100, 2);
-    stock.history.push(round(stock.price, 2));
-    if (stock.history.length > 90) stock.history.shift();
-  }
-
-  // Options are marked-to-market from the current underlying.
-  for (const player of Object.values(players)) {
-    for (const option of player.options) {
-      option.marketPrice = round(optionValue(option, market[option.symbol].price), 2);
-    }
-    player.updatedAt = Date.now();
-  }
-}
-
-function optionValue(option, spot) {
-  const T = Math.max(0.02, (option.expiration - Date.now()) / 86400000 / 365);
-  const sigma = Math.max(0.08, option.iv || 0.30);
-  const r = 0.04;
-  const K = option.strike;
-  const d1 = (Math.log(spot / K) + (r + sigma * sigma / 2) * T) / (sigma * Math.sqrt(T));
-  const d2 = d1 - sigma * Math.sqrt(T);
-  const call = spot * normalCdf(d1) - K * Math.exp(-r * T) * normalCdf(d2);
-  const put = K * Math.exp(-r * T) * normalCdf(-d2) - spot * normalCdf(-d1);
-  return Math.max(0.01, option.type === "call" ? call : put);
-}
-
-function normalCdf(x) {
-  // Standard normal CDF using an Abramowitz-Stegun erf approximation.
-  const z = Number(x);
-  const sign = z < 0 ? -1 : 1;
-  const az = Math.abs(z) / Math.sqrt(2);
-  const t = 1 / (1 + 0.3275911 * az);
-  const a1 = 0.254829592;
-  const a2 = -0.284496736;
-  const a3 = 1.421413741;
-  const a4 = -1.453152027;
-  const a5 = 1.061405429;
-  const erf = sign * (1 - (((((a5 * t + a4) * t) + a3) * t + a2) * t + a1) * t * Math.exp(-az * az));
-  return 0.5 * (1 + erf);
-}
-
-function normalPdf(x) {
-  return Math.exp(-0.5 * x * x) / Math.sqrt(2 * Math.PI);
-}
-
-function optionGreeks(type, spot, strike, ivPercent, days) {
-  const S = Math.max(0.0001, Number(spot));
-  const K = Math.max(0.0001, Number(strike));
-  const sigma = Math.max(0.01, Number(ivPercent));
-  const T = Math.max(1 / 365, Number(days) / 365);
-  const r = 0.04;
-
-  const sqrtT = Math.sqrt(T);
-  const d1 = (Math.log(S / K) + (r + 0.5 * sigma * sigma) * T) / (sigma * sqrtT);
-  const d2 = d1 - sigma * sqrtT;
-  const pdf = normalPdf(d1);
-
-  const callDelta = normalCdf(d1);
-  const putDelta = callDelta - 1;
-  const delta = type === "put" ? putDelta : callDelta;
-
-  const gamma = pdf / (S * sigma * sqrtT);
-  const vega = S * pdf * sqrtT / 100;
-
-  const thetaCall =
-    (-(S * pdf * sigma) / (2 * sqrtT)
-      - r * K * Math.exp(-r * T) * normalCdf(d2)) / 365;
-
-  const thetaPut =
-    (-(S * pdf * sigma) / (2 * sqrtT)
-      + r * K * Math.exp(-r * T) * normalCdf(-d2)) / 365;
-
-  return {
-    delta,
-    gamma,
-    theta: type === "put" ? thetaPut : thetaCall,
-    vega
-  };
-}
-
 async function getRealOptionChain(symbol) {
   return realMarket.fetchOptionChain(symbol, round);
 }
@@ -284,6 +188,7 @@ function tradeStock(player, symbol, side, quantity) {
   if (!stock) throw new Error("Unknown symbol");
   quantity = Math.floor(quantity);
   if (quantity < 1 || quantity > 100000) throw new Error("Invalid quantity");
+  if (!Number.isFinite(stock.price) || stock.price <= 0) throw new Error("No real-time stock quote is currently available.");
   const gross = round(stock.price * quantity);
   if (side === "buy") {
     if (gross > player.cash) throw new Error("Not enough virtual cash");
