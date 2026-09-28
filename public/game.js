@@ -56,6 +56,7 @@ function renderHeader(){
   $("level").textContent=state.player.level;
   $("nameBtn").textContent=state.player.name;
   $("online").textContent=state.online+" online";
+  $("marketStatus").textContent="LIVE · server refresh 5s";
 }
 
 function populateSymbols(){
