@@ -18,6 +18,7 @@ if (!playerId) {
 const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "?playerId=" + encodeURIComponent(playerId));
 const state = { player: null, market: [], others: [], leaderboard: [], online: 0, selected: "AAPL", options: [] };
 const keys = new Set();
+let moveTarget = null;
 const buildings = [
   {x:155,y:72,w:255,h:160,name:"STOCK EXCHANGE",kind:"exchange"},
   {x:455,y:72,w:235,h:160,name:"NEWS CENTER",kind:"news"},
@@ -254,23 +255,56 @@ function drawPlayer(p,me){
   ctx.fillStyle="#f1f6ff";ctx.font="10px system-ui";ctx.textAlign="center";ctx.fillText(p.name,0,-18);
   ctx.restore();
 }
+function setMoveTarget(clientX,clientY){
+  const rect=canvas.getBoundingClientRect();
+  const scaleX=canvas.width/rect.width;
+  const scaleY=canvas.height/rect.height;
+  moveTarget={
+    x:Math.max(25,Math.min(1335,(clientX-rect.left)*scaleX)),
+    y:Math.max(40,Math.min(755,(clientY-rect.top)*scaleY))
+  };
+}
+canvas.addEventListener("pointerdown",e=>{
+  if(e.button!==0)return;
+  setMoveTarget(e.clientX,e.clientY);
+  canvas.setPointerCapture?.(e.pointerId);
+});
+
 function loop(){
   if(state.player){
     let dx=0,dy=0;
-    if(keys.has("ArrowLeft")||keys.has("a"))dx-=1;
-    if(keys.has("ArrowRight")||keys.has("d"))dx+=1;
-    if(keys.has("ArrowUp")||keys.has("w"))dy-=1;
-    if(keys.has("ArrowDown")||keys.has("s"))dy+=1;
+    if(moveTarget){
+      dx=moveTarget.x-state.player.x;
+      dy=moveTarget.y-state.player.y;
+      if(Math.hypot(dx,dy)<4){
+        state.player.x=moveTarget.x;
+        state.player.y=moveTarget.y;
+        moveTarget=null;
+        send({type:"move",x:state.player.x,y:state.player.y});
+      }
+    }
+    if(!moveTarget){
+      if(keys.has("ArrowLeft")||keys.has("a"))dx-=1;
+      if(keys.has("ArrowRight")||keys.has("d"))dx+=1;
+      if(keys.has("ArrowUp")||keys.has("w"))dy-=1;
+      if(keys.has("ArrowDown")||keys.has("s"))dy+=1;
+    }
     if(dx||dy){
       const len=Math.hypot(dx,dy)||1;
-      state.player.x=Math.max(25,Math.min(1335,state.player.x+dx/len*3.5));
-      state.player.y=Math.max(40,Math.min(755,state.player.y+dy/len*3.5));
+      const speed=moveTarget?3.8:3.5;
+      state.player.x=Math.max(25,Math.min(1335,state.player.x+dx/len*speed));
+      state.player.y=Math.max(40,Math.min(755,state.player.y+dy/len*speed));
       send({type:"move",x:state.player.x,y:state.player.y});
     }
   }
   drawCity(); requestAnimationFrame(loop);
 }
-window.addEventListener("keydown",e=>{keys.add(e.key);if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key))e.preventDefault()});
+window.addEventListener("keydown",e=>{
+  if(["INPUT","SELECT","TEXTAREA"].includes(document.activeElement?.tagName))return;
+  keys.add(e.key);
+  if(["ArrowUp","ArrowDown","ArrowLeft","ArrowRight"," "].includes(e.key))e.preventDefault();
+  if(keys.size)moveTarget=null;
+});
 window.addEventListener("keyup",e=>keys.delete(e.key));
 
 ws.addEventListener("open",()=>{
