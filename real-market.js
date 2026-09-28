@@ -1,62 +1,180 @@
 const https = require("https");
 
-const HOST = "query1.finance.yahoo.com";
+const DATA_HOST = "data.alpaca.markets";
+const TRADING_HOST = process.env.ALPACA_TRADING_HOST || "api.alpaca.markets";
+const KEY = process.env.ALPACA_API_KEY;
+const SECRET = process.env.ALPACA_API_SECRET;
 
-function fetchQuote(symbol) {
+function requireCredentials() {
+  if (!KEY || !SECRET) {
+    throw new Error("Real market data is not configured: set ALPACA_API_KEY and ALPACA_API_SECRET on the server.");
+  }
+}
+
+function request(hostname, path) {
+  requireCredentials();
   return new Promise((resolve, reject) => {
     const req = https.get({
-      hostname: HOST,
-      path: "/v8/finance/chart/" + encodeURIComponent(symbol) + "?interval=1m&range=1d&_=" + Date.now(),
-      headers: { "User-Agent": "Market-City/1.0" }
+      hostname,
+      path,
+      headers: {
+        "APCA-API-KEY-ID": KEY,
+        "APCA-API-SECRET-KEY": SECRET,
+        "Accept": "application/json"
+      }
     }, res => {
       let body = "";
       res.setEncoding("utf8");
       res.on("data", chunk => { body += chunk; });
       res.on("end", () => {
-        if (res.statusCode !== 200) return reject(new Error("HTTP " + res.statusCode));
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+          return reject(new Error("Alpaca HTTP " + res.statusCode + ": " + body.slice(0, 300)));
+        }
         try { resolve(JSON.parse(body)); } catch (err) { reject(err); }
       });
     });
     req.on("error", reject);
-    req.setTimeout(8000, () => req.destroy(new Error("timeout")));
+    req.setTimeout(10000, () => req.destroy(new Error("Alpaca request timeout")));
   });
 }
 
 async function refreshMarket(market, symbols, round) {
-  const entries = Object.keys(symbols);
-  await Promise.all(entries.map(async symbol => {
-    try {
-      const data = await fetchQuote(symbol);
-      const result = data.chart?.result?.[0];
-      const meta = result?.meta;
-      if (!meta) continue;
+  const names = Object.keys(symbols);
+  const data = await request(
+    DATA_HOST,
+    "/v2/stocks/snapshots?symbols=" + encodeURIComponent(names.join(",")) + "&feed=sip"
+  );
 
-      const stock = market[symbol];
-      const price = Number(meta.regularMarketPrice);
-      const previousClose = Number(meta.previousClose ?? meta.chartPreviousClose);
-      const open = Number(meta.regularMarketOpen);
+  for (const symbol of names) {
+    const snap = data.snapshots?.[symbol];
+    if (!snap) continue;
 
-      if (!Number.isFinite(price) || price <= 0) continue;
+    const trade = snap.latestTrade;
+    const quote = snap.latestQuote;
+    const daily = snap.dailyBar;
+    const previous = snap.prevDailyBar;
+    const price = Number(trade?.p ?? quote?.ap ?? quote?.bp);
 
-      stock.price = round(price);
-      if (Number.isFinite(previousClose)) stock.previousClose = round(previousClose);
-      if (Number.isFinite(open)) stock.open = round(open);
-      stock.change = stock.previousClose == null ? null : round(stock.price - stock.previousClose);
-      stock.changePct = stock.previousClose ? round((stock.change / stock.previousClose) * 100, 2) : null;
-      stock.lastTradeAt = Date.now();
-      stock.realQuoteTime = Number(meta.regularMarketTime) * 1000 || Date.now();
+    if (!Number.isFinite(price) || price <= 0) continue;
 
-      const closes = result.indicators?.quote?.[0]?.close || [];
-      stock.history = closes
-        .filter(v => Number.isFinite(Number(v)))
-        .map(v => round(Number(v)))
-        .slice(-120);
+    const stock = market[symbol];
+    stock.price = round(price);
+    if (Number.isFinite(Number(previous?.c))) stock.previousClose = round(Number(previous.c));
+    if (Number.isFinite(Number(daily?.o))) stock.open = round(Number(daily.o));
+    stock.change = Number.isFinite(stock.previousClose) ? round(stock.price - stock.previousClose) : null;
+    stock.changePct = Number.isFinite(stock.previousClose) && stock.previousClose
+      ? round((stock.change / stock.previousClose) * 100, 2) : null;
+    stock.lastTradeAt = trade?.t ? new Date(trade.t).getTime() : Date.now();
+    stock.realQuoteTime = quote?.t ? new Date(quote.t).getTime() : stock.lastTradeAt;
 
-      if (!stock.history.length) stock.history = [stock.price];
-    } catch (err) {
-      console.error("Real market update failed for " + symbol + ":", err.message);
+    const minute = snap.minuteBar;
+    if (minute && Number.isFinite(Number(minute.c))) {
+      stock.history = [...(stock.history || []), round(Number(minute.c))].slice(-120);
+    } else {
+      stock.history = [stock.price];
     }
-  }));
+  }
 }
 
-module.exports = { fetchQuote, refreshMarket };
+async function fetchContracts(symbol) {
+  const contracts = [];
+  let pageToken = "";
+
+  do {
+    const query = new URLSearchParams({
+      underlying_symbols: symbol,
+      status: "active",
+      expiration_date_gte: new Date().toISOString().slice(0, 10),
+      limit: "10000"
+    });
+    if (pageToken) query.set("page_token", pageToken);
+
+    const data = await request(
+      TRADING_HOST,
+      "/v2/options/contracts?" + query.toString()
+    );
+
+    contracts.push(...(data.option_contracts || []));
+    pageToken = data.page_token || "";
+  } while (pageToken);
+
+  return contracts;
+}
+
+async function fetchOptionSnapshots(symbol, contractSymbols) {
+  const snapshots = new Map();
+
+  for (let i = 0; i < contractSymbols.length; i += 100) {
+    const batch = contractSymbols.slice(i, i + 100);
+    const query = new URLSearchParams({
+      symbols: batch.join(","),
+      feed: "opra",
+      limit: String(batch.length)
+    });
+
+    let pageToken = "";
+    do {
+      if (pageToken) query.set("page_token", pageToken);
+      const data = await request(
+        DATA_HOST,
+        "/v1beta1/options/snapshots?" + query.toString()
+      );
+      for (const [contractSymbol, snapshot] of Object.entries(data.snapshots || {})) {
+        snapshots.set(contractSymbol, snapshot);
+      }
+      pageToken = data.next_page_token || "";
+    } while (pageToken);
+  }
+
+  return snapshots;
+}
+
+async function fetchOptionChain(symbol, round) {
+  const contracts = await fetchContracts(symbol);
+  if (!contracts.length) return [];
+
+  const snapshots = await fetchOptionSnapshots(symbol, contracts.map(c => c.symbol));
+  const now = Date.now();
+
+  return contracts.map(contract => {
+    const snap = snapshots.get(contract.symbol);
+    const quote = snap?.latestQuote;
+    const trade = snap?.latestTrade;
+    const greeks = snap?.greeks || {};
+
+    const expiration = new Date(contract.expiration_date + "T16:00:00-04:00").getTime();
+    const days = Math.max(0, Math.ceil((expiration - now) / 86400000));
+    const bid = Number(quote?.bp);
+    const ask = Number(quote?.ap);
+    const last = Number(trade?.p);
+
+    return {
+      id: contract.id || contract.symbol,
+      symbol,
+      contractSymbol: contract.symbol,
+      type: contract.type,
+      strike: Number(contract.strike_price),
+      expiration,
+      expirationType: null,
+      days,
+      iv: Number.isFinite(Number(greeks.iv)) ? Number(greeks.iv) * 100 : null,
+      delta: Number.isFinite(Number(greeks.delta)) ? Number(greeks.delta) : null,
+      gamma: Number.isFinite(Number(greeks.gamma)) ? Number(greeks.gamma) : null,
+      theta: Number.isFinite(Number(greeks.theta)) ? Number(greeks.theta) : null,
+      vega: Number.isFinite(Number(greeks.vega)) ? Number(greeks.vega) : null,
+      last: Number.isFinite(last) ? round(last) : null,
+      bid: Number.isFinite(bid) ? round(bid) : null,
+      ask: Number.isFinite(ask) ? round(ask) : null,
+      mid: Number.isFinite(bid) && Number.isFinite(ask) ? round((bid + ask) / 2) : null,
+      volume: null,
+      openInterest: Number.isFinite(Number(contract.open_interest)) ? Number(contract.open_interest) : null,
+      size: Number(contract.size) || 100,
+      updatedAt: quote?.t || trade?.t || null
+    };
+  }).filter(o => Number.isFinite(o.strike) && Number.isFinite(o.expiration));
+}
+
+module.exports = {
+  refreshMarket,
+  fetchOptionChain
+};
