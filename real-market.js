@@ -20,6 +20,7 @@ let streamBroadcast = null;
 let optionCache = new Map();
 let stockReconnectTimer = null;
 let optionReconnectTimer = null;
+const MAX_BASIC_OPTION_STREAM_QUOTES = 200;
 
 function requireCredentials() {
   if (!KEY || !SECRET) {
@@ -284,15 +285,35 @@ async function fetchOptionChain(symbol, round) {
   const contracts = await fetchContracts(symbol);
   if (!contracts.length) return [];
 
-  subscribeOptionSymbols(contracts.map(c => c.symbol));
+  // Basic Alpaca accounts allow up to 200 live option quote subscriptions.
+  // Keep the stream focused on the nearest contracts while the REST chain endpoint
+  // supplies the complete real chain without repeatedly requesting every snapshot.
+  const streamContracts = [...contracts]
+    .sort((a, b) => String(a.expiration_date).localeCompare(String(b.expiration_date)) || Number(a.strike_price) - Number(b.strike_price))
+    .slice(0, MAX_BASIC_OPTION_STREAM_QUOTES);
+  subscribeOptionSymbols(streamContracts.map(c => c.symbol));
+
+  const snapshots = new Map();
+  let pageToken = "";
+  do {
+    const query = new URLSearchParams({ feed: OPTION_FEED, limit: "1000" });
+    if (pageToken) query.set("page_token", pageToken);
+    const data = await request(DATA_HOST, "/v1beta1/options/snapshots/" + encodeURIComponent(symbol) + "?" + query.toString());
+    for (const [contractSymbol, snapshot] of Object.entries(data.snapshots || {})) snapshots.set(contractSymbol, snapshot);
+    pageToken = data.next_page_token || "";
+  } while (pageToken);
+
   const now = Date.now();
 
   return contracts.map(contract => {
     const live = getOptionStreamData(contract.symbol) || {};
-    const bid = Number(live.bid);
-    const ask = Number(live.ask);
-    const last = Number(live.last);
-    const greeks = {};
+    const snap = snapshots.get(contract.symbol) || {};
+    const quote = snap.latestQuote || {};
+    const trade = snap.latestTrade || {};
+    const greeks = snap.greeks || {};
+    const bid = Number(live.bid ?? quote.bp);
+    const ask = Number(live.ask ?? quote.ap);
+    const last = Number(live.last ?? trade.p);
 
     const expiration = new Date(contract.expiration_date + "T16:00:00-04:00").getTime();
     const days = Math.max(0, Math.ceil((expiration - now) / 86400000));
