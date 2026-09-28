@@ -325,7 +325,7 @@ async function getNews(symbols = []) {
 }
 
 function getOptionLive(symbol) { return optionLive.get(symbol) || null; }
-function finite(v) { return Number.isFinite(Number(v)); }
+function finite(v) { return v!==null && v!==undefined && v!=="" && Number.isFinite(Number(v)); }
 function round(n, digits = 2) {
   const p = 10 ** digits;
   return Math.round(Number(n) * p) / p;
