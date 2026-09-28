@@ -53,7 +53,10 @@ function request(host, path) {
   });
 }
 
-function auth(ws) {\n  ws.send(JSON.stringify({ action: "auth", key: KEY, secret: SECRET }));\n}\n
+function auth(ws) {
+  ws.send(JSON.stringify({ action: "auth", key: KEY, secret: SECRET }));
+}
+
 function connectStock() {
   credentials();
   if (stockWs && (stockWs.readyState === WebSocket.OPEN || stockWs.readyState === WebSocket.CONNECTING)) return;
