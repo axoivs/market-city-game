@@ -4,6 +4,7 @@ const path = require("path");
 const crypto = require("crypto");
 const WebSocket = require("ws");
 const https = require("https");
+const realMarket = require("./real-market");
 // Real market-data integration placeholder.
 
 const PORT = Number(process.env.PORT || 3000);
