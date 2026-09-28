@@ -145,14 +145,12 @@ function renderOptionChain(expiration){
       `<td class="call-cell" data-contract="${c.id}">${fmt(c.last ?? c.mid)}</td>`,
       `<td class="call-cell" data-contract="${c.id}">${fmt(c.bid)}</td>`,
       `<td class="call-cell" data-contract="${c.id}">${fmt(c.ask)}</td>`,
-      `<td class="call-cell" data-contract="${c.id}">${c.iv}%</td>`,
       `<td class="call-cell ${cls(c.delta)}" data-contract="${c.id}">${c.delta}</td>`,
       `<td class="call-cell muted" data-contract="${c.id}">${c.volume??0}</td>`,
       `<td class="call-cell muted" data-contract="${c.id}">${c.openInterest??0}</td>`
-    ].join(""):'<td colspan="7" class="muted">—</td>';
+    ].join(""):'<td colspan="6" class="muted">—</td>';
     const put=p?[
       `<td class="put-cell ${cls(p.delta)}" data-contract="${p.id}">${p.delta}</td>`,
-      `<td class="put-cell" data-contract="${p.id}">${p.iv}%</td>`,
       `<td class="put-cell muted" data-contract="${p.id}">${p.volume??0}</td>`,
       `<td class="put-cell muted" data-contract="${p.id}">${p.openInterest??0}</td>`,
       `<td class="put-cell" data-contract="${p.id}">${fmt(p.bid)}</td>`,
