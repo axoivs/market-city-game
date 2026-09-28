@@ -71,10 +71,6 @@ async function updateRealMarket() {
   try {
     await realMarket.refreshMarket(market, SYMBOLS, round);
 
-    if (Object.values(players).some(p => (p.options || []).length)) {
-      await realMarket.refreshOptionPositions(players, round);
-    }
-
     broadcast({
       type: "market",
       market: marketPayload(),
