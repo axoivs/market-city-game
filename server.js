@@ -398,7 +398,7 @@ const server = http.createServer(async (req, res) => {
     try {
       const chain = await getRealOptionChain(symbol);
       res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
-      return res.end(JSON.stringify({ symbol, chain, source: "Alpaca/OPRA" }));
+      return res.end(JSON.stringify({ symbol, chain, source: "Alpaca/" + (process.env.ALPACA_OPTION_FEED || "indicative") }));
     } catch (err) {
       console.error("Real option chain failed:", err.message);
       res.writeHead(503, { "Content-Type": "application/json", "Cache-Control": "no-store" });
