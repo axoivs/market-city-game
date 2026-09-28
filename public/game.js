@@ -165,7 +165,7 @@ function renderOptionChain(expiration){
       <thead><tr><th colspan="7" class="call-group">CALLS · ${expLabel}</th><th class="strike-head">STRIKE</th><th colspan="7" class="put-group">PUTS · ${expLabel}</th></tr>
       <tr><th>LAST</th><th>BID</th><th>ASK</th><th>DELTA</th><th>VOL</th><th>OPEN INT</th><th class="strike-head">STRIKE</th><th>DELTA</th><th>VOL</th><th>OPEN INT</th><th>BID</th><th>ASK</th><th>LAST</th></tr></thead>
       <tbody>${htmlRows}</tbody></table></div>
-    <div class="chain-note"><span>Calls left · puts right · click any contract to load it into the Trading Desk.</span><span>${strikes.length} strikes · ${rows.length} contracts · virtual pricing</span></div>`;
+    <div class="chain-note"><span>Calls left · puts right · live Alpaca quotes update automatically.</span><span>${strikes.length} strikes · ${rows.length} contracts · REAL MARKET DATA</span></div>`;
   $("chainSpot").textContent=`${state.selected} ${spot?money(spot):"—"}`;
   chainEl.querySelectorAll("[data-contract]").forEach(cell=>cell.addEventListener("click",()=>selectOptionContract(cell.dataset.contract)));
 }
@@ -328,6 +328,18 @@ ws.addEventListener("message",e=>{
   } else if(msg.type==="market"){
     state.market=msg.market;state.leaderboard=msg.leaderboard;state.online=msg.online;
     renderWatchlist();renderHeader();selectSymbol(state.selected);
+  } else if(msg.type==="optionTick") {
+    const o=state.options.find(x=>x.contractSymbol===msg.contractSymbol);
+    if(o){
+      if(msg.bid!=null)o.bid=msg.bid;
+      if(msg.ask!=null)o.ask=msg.ask;
+      if(msg.last!=null)o.last=msg.last;
+      o.mid=Number.isFinite(Number(o.bid))&&Number.isFinite(Number(o.ask))?(Number(o.bid)+Number(o.ask))/2:null;
+      o.updatedAt=msg.updatedAt;
+      const active=document.querySelector(".expiration-btn.active");
+      renderOptionChain(active?Number(active.dataset.exp):undefined);
+      renderOptionInfo();
+    }
   } else if(msg.type==="players"){
     state.others=msg.players;
   } else if(msg.type==="error"){
