@@ -766,79 +766,124 @@ async function getRadar() {
 const outlookCache = { data: null, at: 0 };
 const volumeCache = { data: null, at: 0 };
 
-async function get30DayOutlook() {
-  if (outlookCache.data && Date.now() - outlookCache.at < 120000) return outlookCache.data;
+async function getOutlook(days = 30) {
+  const horizon = [30,60,90,180,365].includes(Number(days)) ? Number(days) : 30;
+  if (!getOutlook.cache) getOutlook.cache = new Map();
+  const cached = getOutlook.cache.get(horizon);
+  if (cached && Date.now() - cached.at < 120000) return cached.data;
+
   const radar = await getRadar();
   const candidates = (radar.stocks || [])
     .filter(x => x.hasOptions && finite(x.price) && x.price > 0 && finite(x.changePct))
     .sort((a,b) => Math.abs(b.changePct) - Math.abs(a.changePct))
     .slice(0, 40);
+
   const bars = new Map();
   let cursor = 0;
   const chunks = [];
-  for (let i=0;i<candidates.length;i+=RADAR_BATCH_SIZE) chunks.push(candidates.slice(i,i+RADAR_BATCH_SIZE).map(x=>x.symbol));
-  async function worker(){
-    while(true){
-      const index=cursor++;
-      if(index>=chunks.length)return;
-      const batch=chunks[index];
-      try{
-        const data=await request(DATA_HOST,"/v2/stocks/bars?symbols="+encodeURIComponent(batch.join(","))+"&timeframe=1Day&limit=35&feed="+encodeURIComponent(STOCK_FEED)+"&adjustment=raw");
-        const map=data?.bars||{};
-        for(const s of batch) if(Array.isArray(map[s])) bars.set(s,map[s]);
-      }catch(e){console.error("30-day outlook bars",index,e.message);}
+  for (let i=0;i<candidates.length;i+=RADAR_BATCH_SIZE) {
+    chunks.push(candidates.slice(i,i+RADAR_BATCH_SIZE).map(x=>x.symbol));
+  }
+
+  async function worker() {
+    while (true) {
+      const index = cursor++;
+      if (index >= chunks.length) return;
+      const batch = chunks[index];
+      try {
+        const limit = Math.min(1000, horizon + 10);
+        const data = await request(
+          DATA_HOST,
+          "/v2/stocks/bars?symbols=" + encodeURIComponent(batch.join(",")) +
+          "&timeframe=1Day&limit=" + limit +
+          "&feed=" + encodeURIComponent(STOCK_FEED) + "&adjustment=raw"
+        );
+        const map = data?.bars || {};
+        for (const s of batch) if (Array.isArray(map[s])) bars.set(s,map[s]);
+      } catch(e) {
+        console.error("Outlook bars", horizon, index, e.message);
+      }
     }
   }
   await Promise.all(Array.from({length:Math.min(RADAR_CONCURRENCY,chunks.length)},worker));
 
-  const rows=[];
-  for(const stock of candidates){
-    const history=bars.get(stock.symbol)||[];
-    if(history.length<5) continue;
-    const latest=Number(history[history.length-1]?.c);
-    const old30=Number(history[Math.max(0,history.length-31)]?.c);
-    const old10=Number(history[Math.max(0,history.length-11)]?.c);
-    if(!finite(latest)||latest<=0) continue;
-    const return30=finite(old30)&&old30>0?((latest-old30)/old30)*100:null;
-    const return10=finite(old10)&&old10>0?((latest-old10)/old10)*100:null;
-    const absMove=Math.abs(Number(return30||0));
-    const direction=(Number(return30||stock.changePct)>=0)?"call":"put";
-    let option=null;
-    try{
-      const exps=await getExpirations(stock.symbol);
-      const exp=exps.find(d=>{const days=(Date.parse(d+"T23:59:59-04:00")-Date.now())/86400000;return days>=21&&days<=45;})||exps[0];
-      if(exp){
-        const chain=await getOptionChain(stock.symbol,exp);
-        const candidates2=chain.chain.filter(o=>{
-          if(o.type!==direction||!finite(o.strike)||!finite(o.ask)||o.ask<=0)return false;
-          const m=Math.abs(o.strike-latest)/latest;
-          const d=finite(o.delta)?Math.abs(o.delta):0;
-          return m<=0.08 && (!finite(o.delta)||(d>=0.30&&d<=0.70));
+  const rows = [];
+  for (const stock of candidates) {
+    const history = bars.get(stock.symbol) || [];
+    if (history.length < 5) continue;
+
+    const latest = Number(history[history.length-1]?.c);
+    const oldHorizon = Number(history[Math.max(0,history.length-(horizon+1))]?.c);
+    const old30 = Number(history[Math.max(0,history.length-31)]?.c);
+    if (!finite(latest) || latest <= 0) continue;
+
+    const returnHorizon = finite(oldHorizon) && oldHorizon > 0 ? ((latest-oldHorizon)/oldHorizon)*100 : null;
+    const return30 = finite(old30) && old30 > 0 ? ((latest-old30)/old30)*100 : null;
+    const direction = Number(returnHorizon ?? stock.changePct) >= 0 ? "call" : "put";
+
+    let option = null;
+    try {
+      const exps = await getExpirations(stock.symbol);
+      const targetDays = Math.max(21, Math.min(90, Math.round(horizon * 0.25)));
+      const exp = exps.find(d => {
+        const daysToExp = (Date.parse(d+"T23:59:59-04:00")-Date.now())/86400000;
+        return daysToExp >= targetDays && daysToExp <= Math.max(targetDays + 30, 45);
+      }) || exps[0];
+
+      if (exp) {
+        const chain = await getOptionChain(stock.symbol,exp);
+        const candidates2 = chain.chain.filter(o => {
+          if (o.type !== direction || !finite(o.strike) || !finite(o.ask) || o.ask <= 0) return false;
+          const m = Math.abs(o.strike-latest)/latest;
+          const d = finite(o.delta) ? Math.abs(o.delta) : 0;
+          return m <= 0.08 && (!finite(o.delta) || (d >= 0.30 && d <= 0.70));
         });
-        candidates2.sort((a,b)=>{
-          const al=(b.volume||0)-(a.volume||0), ad=(b.openInterest||0)-(a.openInterest||0);
-          return al||ad;
+        candidates2.sort((a,b) => {
+          const av = (b.volume||0)-(a.volume||0);
+          const ai = (b.openInterest||0)-(a.openInterest||0);
+          return av || ai;
         });
-        option=candidates2[0]||null;
+        option = candidates2[0] || null;
       }
-    }catch(e){console.error("30-day option lookup",stock.symbol,e.message);}
-    const momentum=clamp(50+(Number(return30||0)*2)+(Number(return10||0)*2),0,100);
-    const liquidity=option?Math.min(100,Math.log10(1+(option.volume||0))*25+Math.log10(1+(option.openInterest||0))*10):0;
-    const spread=option&&finite(option.bid)&&option.bid>0&&finite(option.ask)?((option.ask-option.bid)/option.ask):1;
-    const priceFit=option&&option.ask>0?Math.max(0,100-(option.ask/latest)*100*8):0;
-    const setupScore=round(clamp(momentum*.45+liquidity*.25+(1-Math.min(1,spread))*100*.15+priceFit*.15,0,100),1);
+    } catch(e) {
+      console.error("Outlook option lookup", stock.symbol, e.message);
+    }
+
+    const momentum = clamp(50 + Number(returnHorizon||0)*1.5 + Number(return30||0)*0.75,0,100);
+    const liquidity = option
+      ? Math.min(100,Math.log10(1+(option.volume||0))*25+Math.log10(1+(option.openInterest||0))*10)
+      : 0;
+    const spread = option && finite(option.bid) && option.bid > 0 && finite(option.ask)
+      ? (option.ask-option.bid)/option.ask : 1;
+    const priceFit = option && option.ask > 0
+      ? Math.max(0,100-(option.ask/latest)*100*8) : 0;
+    const setupScore = round(clamp(momentum*.45+liquidity*.25+(1-Math.min(1,spread))*100*.15+priceFit*.15,0,100),1);
+
     rows.push({
-      symbol:stock.symbol,name:stock.name,price:latest,return30:finite(return30)?round(return30,2):null,
-      return10:finite(return10)?round(return10,2):null,direction:direction.toUpperCase(),trend:stock.trend,
-      contractSymbol:option?.contractSymbol||null,type:option?.type||direction,strike:option?.strike??null,
-      expirationDate:option?.expirationDate||null,days:option?.days??null,ask:option?.ask??null,bid:option?.bid??null,
-      delta:option?.delta??null,volume:option?.volume??null,openInterest:option?.openInterest??null,
-      premiumPct:option&&option.ask>0?round((option.ask/latest)*100,2):null,setupScore,real:true
+      symbol:stock.symbol,name:stock.name,price:latest,
+      returnPeriod:finite(returnHorizon)?round(returnHorizon,2):null,
+      return30:finite(return30)?round(return30,2):null,
+      direction:direction.toUpperCase(),trend:stock.trend,
+      contractSymbol:option?.contractSymbol||null,type:option?.type||direction,
+      strike:option?.strike??null,expirationDate:option?.expirationDate||null,
+      days:option?.days??null,ask:option?.ask??null,bid:option?.bid??null,
+      delta:option?.delta??null,volume:option?.volume??null,
+      openInterest:option?.openInterest??null,
+      premiumPct:option&&option.ask>0?round((option.ask/latest)*100,2):null,
+      setupScore,real:true
     });
   }
+
   rows.sort((a,b)=>b.setupScore-a.setupScore);
-  const result={updatedAt:Date.now(),periodDays:30,source:"Alpaca",stocks:rows.slice(0,20),methodology:"30-day and 10-day real price momentum plus real option liquidity, spread, delta and premium-to-stock-price fit. This is a game analytics score, not a guaranteed return prediction."};
-  outlookCache.data=result;outlookCache.at=Date.now();return result;
+  const result = {
+    updatedAt:Date.now(),
+    periodDays:horizon,
+    source:"Alpaca",
+    stocks:rows.slice(0,20),
+    methodology:horizon+"-day real price history plus 30-day momentum, current real option liquidity, spread, delta and premium-to-stock-price fit. This is a game analytics score, not a guaranteed return prediction."
+  };
+  getOutlook.cache.set(horizon,{data:result,at:Date.now()});
+  return result;
 }
 
 async function getUnusualOptionVolume() {
