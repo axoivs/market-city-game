@@ -224,7 +224,14 @@ function optionGreeks(type, spot, strike, iv, days) {
 function makeOptionChain(symbol) {
   const stock = market[symbol];
   if (!stock || !Number.isFinite(stock.price) || stock.price <= 0) return [];
-  const strikes = [-0.10, -0.05, 0, 0.05, 0.10].map(mult => round(stock.price * (1 + mult), 0));
+  // Generate the full simulated strike ladder around the live price.
+  // 41 strikes: 20% below spot through 20% above spot, in 1% increments.
+  const strikes = [];
+  for (let pct = -20; pct <= 20; pct++) {
+    const strike = round(stock.price * (1 + pct / 100), 0);
+    if (strike > 0 && !strikes.includes(strike)) strikes.push(strike);
+  }
+  strikes.sort((a, b) => a - b);
   const expirationDays = [7, 14, 30, 60];
   const contracts = [];
   for (const days of expirationDays) {
