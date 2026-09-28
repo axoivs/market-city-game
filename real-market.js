@@ -1,4 +1,6 @@
 const https = require("https");
+const WebSocket = require("ws");
+const { decode } = require("@msgpack/msgpack");
 
 const DATA_HOST = "data.alpaca.markets";
 const TRADING_HOST = process.env.ALPACA_TRADING_HOST || "paper-api.alpaca.markets";
@@ -6,6 +8,18 @@ const STOCK_FEED = process.env.ALPACA_STOCK_FEED || "iex";
 const OPTION_FEED = process.env.ALPACA_OPTION_FEED || "indicative";
 const KEY = process.env.ALPACA_API_KEY;
 const SECRET = process.env.ALPACA_API_SECRET;
+const STOCK_STREAM_HOST = "stream.data.alpaca.markets";
+const OPTION_STREAM_HOST = "stream.data.alpaca.markets";
+const stockSymbols = new Set();
+const optionSymbols = new Set();
+let stockStream = null;
+let optionStream = null;
+let streamMarket = null;
+let streamRound = null;
+let streamBroadcast = null;
+let optionCache = new Map();
+let stockReconnectTimer = null;
+let optionReconnectTimer = null;
 
 function requireCredentials() {
   if (!KEY || !SECRET) {
@@ -38,6 +52,141 @@ function request(hostname, path) {
     req.on("error", reject);
     req.setTimeout(10000, () => req.destroy(new Error("Alpaca request timeout")));
   });
+}
+
+
+function streamAuth(ws) {
+  ws.send(JSON.stringify({ action: "auth", key: KEY, secret: SECRET }));
+}
+
+function scheduleStockReconnect() {
+  if (stockReconnectTimer) return;
+  stockReconnectTimer = setTimeout(() => {
+    stockReconnectTimer = null;
+    connectStockStream();
+  }, 3000);
+}
+
+function scheduleOptionReconnect() {
+  if (optionReconnectTimer) return;
+  optionReconnectTimer = setTimeout(() => {
+    optionReconnectTimer = null;
+    connectOptionStream();
+  }, 3000);
+}
+
+function connectStockStream() {
+  requireCredentials();
+  if (stockStream && (stockStream.readyState === WebSocket.OPEN || stockStream.readyState === WebSocket.CONNECTING)) return;
+  stockStream = new WebSocket("wss://" + STOCK_STREAM_HOST + "/v2/" + encodeURIComponent(STOCK_FEED));
+  stockStream.on("open", () => {
+    streamAuth(stockStream);
+  });
+  stockStream.on("message", raw => {
+    try {
+      const messages = JSON.parse(raw.toString());
+      for (const msg of messages) {
+        if (msg.T === "success" && msg.msg === "authenticated") {
+          stockStream.send(JSON.stringify({ action: "subscribe", trades: [...stockSymbols], quotes: [...stockSymbols] }));
+        } else if (msg.T === "subscription") {
+          continue;
+        } else if (msg.T === "q" || msg.T === "t") {
+          applyStockStreamMessage(msg);
+        }
+      }
+    } catch (err) {
+      console.error("Alpaca stock stream message error:", err.message);
+    }
+  });
+  stockStream.on("error", err => console.error("Alpaca stock stream error:", err.message));
+  stockStream.on("close", () => {
+    stockStream = null;
+    scheduleStockReconnect();
+  });
+}
+
+function applyStockStreamMessage(msg) {
+  if (!streamMarket || !streamRound) return;
+  const stock = streamMarket[msg.S];
+  if (!stock) return;
+  const price = msg.T === "q"
+    ? (Number.isFinite(Number(msg.ap)) ? Number(msg.ap) : Number(msg.bp))
+    : Number(msg.p);
+  if (!Number.isFinite(price) || price <= 0) return;
+  stock.price = streamRound(price);
+  stock.lastTradeAt = msg.t ? new Date(msg.t).getTime() : Date.now();
+  stock.realQuoteTime = stock.lastTradeAt;
+  stock.stream = true;
+  if (streamBroadcast) streamBroadcast();
+}
+
+function connectOptionStream() {
+  requireCredentials();
+  if (optionStream && (optionStream.readyState === WebSocket.OPEN || optionStream.readyState === WebSocket.CONNECTING)) return;
+  optionStream = new WebSocket("wss://" + OPTION_STREAM_HOST + "/v1beta1/" + encodeURIComponent(OPTION_FEED));
+  optionStream.on("open", () => {
+    streamAuth(optionStream);
+  });
+  optionStream.on("message", raw => {
+    try {
+      const decoded = decode(Buffer.from(raw));
+      const messages = Array.isArray(decoded) ? decoded : [decoded];
+      for (const msg of messages) {
+        if (!msg || typeof msg !== "object") continue;
+        if (msg.T === "success" && msg.msg === "authenticated") {
+          if (optionSymbols.size) optionStream.send(JSON.stringify({ action: "subscribe", trades: [...optionSymbols], quotes: [...optionSymbols] }));
+        } else if (msg.T === "q" || msg.T === "t") {
+          applyOptionStreamMessage(msg);
+        }
+      }
+    } catch (err) {
+      console.error("Alpaca option stream message error:", err.message);
+    }
+  });
+  optionStream.on("error", err => console.error("Alpaca option stream error:", err.message));
+  optionStream.on("close", () => {
+    optionStream = null;
+    scheduleOptionReconnect();
+  });
+}
+
+function applyOptionStreamMessage(msg) {
+  const symbol = String(msg.S || "");
+  if (!symbol) return;
+  const existing = optionCache.get(symbol) || {};
+  if (msg.T === "q") {
+    existing.bid = Number.isFinite(Number(msg.bp)) ? Number(msg.bp) : existing.bid;
+    existing.ask = Number.isFinite(Number(msg.ap)) ? Number(msg.ap) : existing.ask;
+    existing.bidSize = Number.isFinite(Number(msg.bs)) ? Number(msg.bs) : existing.bidSize;
+    existing.askSize = Number.isFinite(Number(msg.as)) ? Number(msg.as) : existing.askSize;
+  } else if (msg.T === "t") {
+    existing.last = Number.isFinite(Number(msg.p)) ? Number(msg.p) : existing.last;
+    existing.tradeSize = Number.isFinite(Number(msg.s)) ? Number(msg.s) : existing.tradeSize;
+  }
+  existing.updatedAt = msg.t || existing.updatedAt;
+  existing.feed = OPTION_FEED;
+  optionCache.set(symbol, existing);
+  if (streamBroadcast) streamBroadcast();
+}
+
+function startRealTimeStreams(market, symbols, round, broadcastFn) {
+  streamMarket = market;
+  streamRound = round;
+  streamBroadcast = broadcastFn;
+  Object.keys(symbols).forEach(symbol => stockSymbols.add(symbol));
+  connectStockStream();
+  connectOptionStream();
+}
+
+function subscribeOptionSymbols(contractSymbols) {
+  contractSymbols.forEach(symbol => optionSymbols.add(symbol));
+  if (optionStream && optionStream.readyState === WebSocket.OPEN) {
+    optionStream.send(JSON.stringify({ action: "subscribe", trades: contractSymbols, quotes: contractSymbols }));
+  }
+}
+
+function getOptionStreamData(symbol) {
+  return optionCache.get(symbol) || null;
 }
 
 async function refreshMarket(market, symbols, round) {
@@ -218,6 +367,9 @@ async function refreshOptionPositions(players, round) {
 
 module.exports = {
   refreshMarket,
+  startRealTimeStreams,
+  subscribeOptionSymbols,
+  getOptionStreamData,
   fetchOptionChain,
   refreshOptionPositions
 };
