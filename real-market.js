@@ -891,4 +891,4 @@ function start(market, symbols, round, broadcast) {
   stockSymbols = new Set(Object.keys(symbols));
   connectStock();
 }
-module.exports = { refreshMarket, start, getOptionChain, getExpirations, getNews, publicStock, getOptionLive, getAssets, getStockQuote, getRadar };
+module.exports = { refreshMarket, start, getOptionChain, getExpirations, getNews, publicStock, getOptionLive, getAssets, getStockQuote, getRadar, get30DayOutlook, getUnusualOptionVolume };
