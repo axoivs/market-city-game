@@ -222,7 +222,7 @@ function makeOptionChain(symbol) {
   const contracts = [];
   for (const strike of strikes) {
     for (const type of ["call", "put"]) {
-      const iv = Math.min(0.80, Math.max(0.18, SYMBOLS[symbol].volatility * 18));
+      const iv = 0.30;
       const temp = { type, symbol, strike, expiration, iv };
       const mid = optionValue(temp, stock.price);
       const spread = Math.max(0.03, mid * 0.08);
