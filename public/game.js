@@ -56,7 +56,6 @@ function renderHeader(){
   $("level").textContent=state.player.level;
   $("nameBtn").textContent=state.player.name;
   $("online").textContent=state.online+" online";
-  $("marketStatus").textContent="LIVE · server refresh 5s";
 }
 
 function populateSymbols(){
@@ -278,11 +277,16 @@ function handleMapPointer(e){
   if(!setMoveTarget(e.clientX,e.clientY))return;
   e.preventDefault();
   e.stopPropagation();
+  toast("Moving to destination");
 }
 
-canvas.addEventListener("pointerdown",handleMapPointer,{passive:false});
-canvas.addEventListener("click",handleMapPointer,{passive:false});
-canvas.addEventListener("touchstart",handleMapPointer,{passive:false});
+// Listen on the whole world container, not just the canvas, so the map remains
+// clickable even when the canvas is resized or another map-layer element is present.
+const worldWrap=document.querySelector(".world-wrap");
+worldWrap.addEventListener("pointerdown",handleMapPointer,{passive:false});
+worldWrap.addEventListener("click",handleMapPointer,{passive:false});
+worldWrap.addEventListener("touchstart",handleMapPointer,{passive:false});
+
 function loop(){
   if(state.player){
     let dx=0,dy=0;
