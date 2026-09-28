@@ -1,6 +1,5 @@
 const https = require("https");
 const WebSocket = require("ws");
-const { encode, decode } = require("@msgpack/msgpack");
 
 const DATA_HOST = "data.alpaca.markets";
 const TRADING_HOST = process.env.ALPACA_TRADING_HOST || "paper-api.alpaca.markets";
@@ -9,17 +8,14 @@ const OPTION_FEED = process.env.ALPACA_OPTION_FEED || "indicative";
 const KEY = process.env.ALPACA_API_KEY;
 const SECRET = process.env.ALPACA_API_SECRET;
 const STOCK_STREAM = "wss://stream.data.alpaca.markets/v2/" + STOCK_FEED;
-const OPTION_STREAM = "wss://stream.data.alpaca.markets/v1beta1/" + OPTION_FEED;
 
 let stockWs = null;
-let optionWs = null;
 let stockSymbols = new Set();
 let optionSymbols = new Set();
 let marketRef = null;
 let roundRef = null;
 let broadcastRef = null;
 let stockReconnect = null;
-let optionReconnect = null;
 const optionLive = new Map();
 const chainCache = new Map();
 const expirationCache = new Map();
@@ -57,21 +53,7 @@ function request(host, path) {
   });
 }
 
-function auth(ws, msgpack = false) {
-  const message = { action: "auth", key: KEY, secret: SECRET };
-  ws.send(msgpack ? Buffer.from(encode(message)) : JSON.stringify(message));
-}
-
-function scheduleStockReconnect() {
-  if (stockReconnect) return;
-  stockReconnect = setTimeout(() => { stockReconnect = null; connectStock(); }, 3000);
-}
-
-function scheduleOptionReconnect() {
-  if (optionReconnect) return;
-  optionReconnect = setTimeout(() => { optionReconnect = null; connectOptions(); }, 3000);
-}
-
+function auth(ws) {\n  ws.send(JSON.stringify({ action: "auth", key: KEY, secret: SECRET }));\n}\n
 function connectStock() {
   credentials();
   if (stockWs && (stockWs.readyState === WebSocket.OPEN || stockWs.readyState === WebSocket.CONNECTING)) return;
@@ -305,7 +287,6 @@ async function getOptionChain(symbol, expirationDate) {
     };
   }).filter(x => finite(x.strike));
 
-  subscribeOptions(chain.map(x => x.contractSymbol).slice(0, 200));
   const result = { expiration, chain };
   chainCache.set(key, { data: result, expires: Date.now() + 5000 });
   return result;
@@ -352,6 +333,5 @@ function start(market, symbols, round, broadcast) {
   marketRef = market; roundRef = round; broadcastRef = broadcast;
   stockSymbols = new Set(Object.keys(symbols));
   connectStock();
-  connectOptions();
 }
 module.exports = { refreshMarket, start, getOptionChain, getExpirations, getNews, publicStock, getOptionLive };
