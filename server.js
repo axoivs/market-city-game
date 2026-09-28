@@ -219,6 +219,7 @@ wss.on("connection",(ws,req)=>{
     try{
       const m=JSON.parse(raw.toString());
       if(m.type==="hello"){const n=String(m.name||"").trim().slice(0,24);if(n)p.name=n.replace(/[^a-zA-Z0-9 _-]/g,"");savePlayers();send(ws,payloadFor(p));}
+      else if(m.type==="saveWatchlist"){p.watchlist=normalizeWatchlist(m.watchlist);p.updatedAt=Date.now();savePlayers();send(ws,payloadFor(p));}
       else if(m.type==="stockOrder"){stockOrder(p,String(m.symbol||"").toUpperCase(),m.side,m.quantity);send(ws,payloadFor(p));}
       else if(m.type==="optionOrder"){await optionOrder(p,m);send(ws,payloadFor(p));}
       else if(m.type==="tourComplete"){mission(p,"cityTour");savePlayers();send(ws,payloadFor(p));}
