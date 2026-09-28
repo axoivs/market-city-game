@@ -369,8 +369,18 @@ const server = http.createServer((req, res) => {
 });
 
 const wss = new WebSocket.Server({ server });
-wss.on("connection", ws => {
-  const id = crypto.randomUUID();
+wss.on("connection", (ws, req) => {
+  const requestUrl = new URL(req.url || "/", "http://localhost");
+  const candidate = requestUrl.searchParams.get("playerId") || "";
+  const id = /^[a-f0-9-]{20,64}$/i.test(candidate) ? candidate : crypto.randomUUID();
+
+  // If the same trader reconnects, replace the old socket without creating
+  // a second player identity or losing the saved portfolio.
+  const previous = sockets.get(id);
+  if (previous && previous !== ws) {
+    try { previous.close(); } catch {}
+  }
+
   const player = getPlayer(id);
   sockets.set(id, ws);
   worldPlayers.set(id, { id, name: player.name, x: player.x, y: player.y });
