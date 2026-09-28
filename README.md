@@ -1,51 +1,46 @@
 # Market City
 
-A lightweight 2D multiplayer stock-market simulation game.
+Market City is a 2D multiplayer stock-market game built around **real Alpaca market data**.
 
-## MVP
+## Data architecture
 
-- 2D financial city built with HTML5 Canvas
-- Virtual starting balance of **$100,000**
-- Simulated stock market with live-moving prices
-- Stock buy/sell trading
-- Simulated call and put options
-- Portfolio and cash tracking
-- Missions and XP
-- Multiplayer player positions over WebSockets
-- Persistent player state on the server
-- No real-money trading
+The game no longer generates simulated stock or option prices.
 
-## Run locally
+- **Stocks:** Alpaca real-time WebSocket feed. The default server configuration uses the IEX feed available to Basic market-data accounts.
+- **Options:** Alpaca option-chain snapshots provide the real contract list, quotes/trades and Greeks; the Alpaca option WebSocket continuously overlays live option quote/trade updates.
+- **News:** Alpaca Market Data news endpoint.
+- **Contracts and expirations:** Alpaca Options Contracts API.
+- **Trading:** game orders use virtual cash only. The game does not submit orders to Alpaca.
+- **Persistence:** player cash, holdings, options and missions are stored locally in `data/players.json`.
+
+Alpaca documents the stock WebSocket as the preferred way to receive current stock pricing, and the option WebSocket as the real-time option pricing stream. urlAlpaca real-time stock datahttps://docs.alpaca.markets/us/docs/real-time-stock-pricing-data urlAlpaca real-time option datahttps://docs.alpaca.markets/us/docs/real-time-option-data
+
+## Environment
+
+Set these on the server; never commit them:
+
+```bash
+export ALPACA_API_KEY='YOUR_KEY'
+export ALPACA_API_SECRET='YOUR_SECRET'
+export ALPACA_TRADING_HOST='paper-api.alpaca.markets'
+export ALPACA_STOCK_FEED='iex'
+export ALPACA_OPTION_FEED='indicative'
+```
+
+Paper Trading credentials use `paper-api.alpaca.markets` for trading API calls while market data uses `data.alpaca.markets`. urlAlpaca authenticationhttps://docs.alpaca.markets/us/docs/authentication
+
+## Run
 
 ```bash
 npm install
+npm run check
 npm start
 ```
 
-Open http://localhost:3000.
-
-## Server
-
-The production target is the $6/month DigitalOcean Ubuntu server at `204.48.27.32`.
-
-The server is intentionally dependency-light so it can run comfortably on a 1 GB droplet.
-
-## Market data
-
-The MVP uses a server-side simulated market. A real market-data provider can be connected later through the market adapter without changing the game UI or portfolio engine.
-
-## Project structure
-
-- `server.js` — HTTP API, WebSocket multiplayer, market engine, portfolio engine
-- `public/index.html` — game shell
-- `public/game.js` — 2D client/gameplay
-- `public/style.css` — UI
-- `ecosystem.config.cjs` — PM2 configuration
-- `nginx/market-city.conf` — production Nginx example
+Production uses PM2 and Nginx. The browser connects to the application WebSocket over WSS.
 
 ## Important
 
-This is a game/simulation. Trades use virtual money and do not place real securities or options orders.
+This is a game. It uses **virtual money**. Clicking BUY or SELL does not place a real order with Alpaca.
 
-
-<!-- real market data integration in progress -->
+Real market-data availability depends on the Alpaca feed entitlement and market conditions. For example, Alpaca's free stock market-data offering provides live IEX data, while SIP data requires the corresponding subscription. urlAlpaca market-data FAQhttps://docs.alpaca.markets/us/docs/market-data-faq
