@@ -146,13 +146,13 @@ function renderOptionChain(expiration){
       `<td class="call-cell" data-contract="${c.id}">${fmt(c.bid)}</td>`,
       `<td class="call-cell" data-contract="${c.id}">${fmt(c.ask)}</td>`,
       `<td class="call-cell ${cls(c.delta)}" data-contract="${c.id}">${c.delta}</td>`,
-      `<td class="call-cell muted" data-contract="${c.id}">${c.volume??0}</td>`,
-      `<td class="call-cell muted" data-contract="${c.id}">${c.openInterest??0}</td>`
+      `<td class="call-cell muted" data-contract="${c.id}">${c.volume == null ? "—" : c.volume}</td>`,
+      `<td class="call-cell muted" data-contract="${c.id}">${c.openInterest == null ? "—" : c.openInterest}</td>`
     ].join(""):'<td colspan="6" class="muted">—</td>';
     const put=p?[
       `<td class="put-cell ${cls(p.delta)}" data-contract="${p.id}">${p.delta}</td>`,
-      `<td class="put-cell muted" data-contract="${p.id}">${p.volume??0}</td>`,
-      `<td class="put-cell muted" data-contract="${p.id}">${p.openInterest??0}</td>`,
+      `<td class="put-cell muted" data-contract="${p.id}">${p.volume == null ? "—" : p.volume}</td>`,
+      `<td class="put-cell muted" data-contract="${p.id}">${p.openInterest == null ? "—" : p.openInterest}</td>`,
       `<td class="put-cell" data-contract="${p.id}">${fmt(p.bid)}</td>`,
       `<td class="put-cell" data-contract="${p.id}">${fmt(p.ask)}</td>`,
       `<td class="put-cell" data-contract="${p.id}">${fmt(p.last ?? p.mid)}</td>`
@@ -180,9 +180,11 @@ function selectOptionContract(id){
 
 async function loadOptions(){
   const r=await fetch("/api/options?symbol="+encodeURIComponent(state.selected)+"&_="+Date.now(),{cache:"no-store"});
-  const data=await r.json(); state.options=data.chain||[];
+  const data=await r.json();
+  if(!r.ok) throw new Error(data.error || "Real option data unavailable");
+  state.options=data.chain||[];
   renderExpirationDates(); renderOptionChain();
-  $("contract").innerHTML=state.options.map((o,i)=>`<option value="${i}">${o.type.toUpperCase()} ${o.strike} · ${formatExpiration(o.expiration)} · ask ${money(o.ask)}</option>`).join("");
+  $("contract").innerHTML=state.options.map((o,i)=>`<option value="${i}">${o.type.toUpperCase()} ${o.strike} · ${formatExpiration(o.expiration)} · ask ${o.ask == null ? "—" : money(o.ask)}</option>`).join("");
   renderOptionInfo();
 }
 
