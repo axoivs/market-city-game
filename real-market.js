@@ -298,7 +298,7 @@ async function getOptionChain(symbol, expirationDate) {
       vega: finite(g.vega) ? Number(g.vega) : null,
       iv: finite(g.iv) ? Number(g.iv) * 100 : null,
       volume: finite(snap.dailyBar?.v) ? Number(snap.dailyBar.v) : null,
-      openInterest: finite(c.open_interest) ? Number(c.open_interest) : null,
+      openInterest: finite(c.open_interest ?? c.openInterest ?? snap.open_interest ?? snap.openInterest) ? Number(c.open_interest ?? c.openInterest ?? snap.open_interest ?? snap.openInterest) : null,
       size: Number(c.size) || 100,
       updatedAt: live.updatedAt || quote.t || trade.t || null,
       feed: OPTION_FEED
