@@ -156,7 +156,7 @@ function renderOptionChain(expiration){
       `<td class="put-cell" data-contract="${p.id}">${fmt(p.bid)}</td>`,
       `<td class="put-cell" data-contract="${p.id}">${fmt(p.ask)}</td>`,
       `<td class="put-cell" data-contract="${p.id}">${fmt(p.last ?? p.mid)}</td>`
-    ].join(""):'<td colspan="7" class="muted">—</td>';
+    ].join(""):'<td colspan="6" class="muted">—</td>';
     return `<tr class="${atm?"atm":""}" data-strike="${k}">${call}<td class="strike">${k}</td>${put}</tr>`;
   }).join("");
   chainEl.innerHTML=`
@@ -337,7 +337,7 @@ $("buyStock").onclick=()=>send({type:"stockOrder",symbol:state.selected,side:"bu
 $("sellStock").onclick=()=>send({type:"stockOrder",symbol:state.selected,side:"sell",quantity:Number($("shares").value)});
 $("buyOption").onclick=()=>{
   const o=state.options[Number($("contract").value)||0];
-  if(o)send({type:"optionOrder",symbol:o.symbol,type:o.type,strike:o.strike,quantity:Number($("contracts").value)});
+  if(o)send({type:"optionOrder",symbol:o.symbol,type:o.type,strike:o.strike,contractSymbol:o.contractSymbol,quantity:Number($("contracts").value)});
 };
 $("nameBtn").onclick=()=>{
   const name=prompt("Choose your trader name:",state.player?.name||"Trader");
