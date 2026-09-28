@@ -169,22 +169,26 @@ function subscribeOptions(symbols) {
 
 async function refreshMarket(market, symbols, round) {
   const names = Object.keys(symbols);
-  const data = await request(DATA_HOST, "/v2/stocks/snapshots?symbols=" + encodeURIComponent(names.join(",")) + "&feed=" + encodeURIComponent(STOCK_FEED));
-  const snapshots = data && data.snapshots && typeof data.snapshots === "object" ? data.snapshots : {};
+
+  const [quotes, trades] = await Promise.all([
+    request(DATA_HOST, "/v2/stocks/quotes/latest?symbols=" + encodeURIComponent(names.join(",")) + "&feed=" + encodeURIComponent(STOCK_FEED)),
+    request(DATA_HOST, "/v2/stocks/trades/latest?symbols=" + encodeURIComponent(names.join(",")) + "&feed=" + encodeURIComponent(STOCK_FEED))
+  ]);
+
+  const qmap = quotes?.quotes || {};
+  const tmap = trades?.trades || {};
   let loaded = 0;
 
   for (const symbol of names) {
-    const snap = snapshots[symbol];
-    if (!snap) continue;
     const stock = market[symbol];
-    const trade = snap.latestTrade || {};
-    const quote = snap.latestQuote || {};
-    const daily = snap.dailyBar || {};
-    const prev = snap.prevDailyBar || {};
-    const tradePx = Number(trade.p);
-    const askPx = Number(quote.ap);
+    const quote = qmap[symbol] || {};
+    const trade = tmap[symbol] || {};
+
     const bidPx = Number(quote.bp);
-    const price = Number.isFinite(tradePx) && tradePx > 0 ? tradePx :
+    const askPx = Number(quote.ap);
+    const tradePx = Number(trade.p);
+
+    let price = Number.isFinite(tradePx) && tradePx > 0 ? tradePx :
       (Number.isFinite(askPx) && askPx > 0 ? askPx :
       (Number.isFinite(bidPx) && bidPx > 0 ? bidPx : NaN));
 
@@ -194,26 +198,19 @@ async function refreshMarket(market, symbols, round) {
     }
     if (Number.isFinite(bidPx) && bidPx > 0) stock.bid = round(bidPx);
     if (Number.isFinite(askPx) && askPx > 0) stock.ask = round(askPx);
-    if (Number.isFinite(Number(daily.o))) stock.open = round(Number(daily.o));
-    if (Number.isFinite(Number(prev.c))) stock.previousClose = round(Number(prev.c));
-    if (Number.isFinite(stock.price) && Number.isFinite(stock.previousClose) && stock.previousClose !== 0) {
-      stock.change = round(stock.price - stock.previousClose);
-      stock.changePct = round((stock.change / stock.previousClose) * 100, 2);
-    }
+
+    stock.updatedAt = trade.t ? Date.parse(trade.t) : (quote.t ? Date.parse(quote.t) : Date.now());
     stock.lastTradeAt = trade.t ? Date.parse(trade.t) : null;
-    stock.updatedAt = quote.t ? Date.parse(quote.t) : stock.lastTradeAt;
     stock.history = stock.history || [];
     if (Number.isFinite(stock.price)) stock.history.push(stock.price);
     stock.history = stock.history.slice(-120);
   }
 
-  console.log("Alpaca stock snapshot seed:", loaded + "/" + names.length,
+  console.log("Alpaca latest stock seed:", loaded + "/" + names.length,
     names.map(symbol => symbol + "=" + (finite(market[symbol].price) ? market[symbol].price : "MISSING")).join(" "));
-  if (!loaded) {
-    throw new Error("Alpaca returned no usable stock prices from the " + STOCK_FEED + " snapshot feed.");
-  }
-}
 
+  if (!loaded) throw new Error("Alpaca returned no usable latest stock trades or quotes from the " + STOCK_FEED + " feed.");
+}
 async function fetchContracts(symbol, expirationDate) {
   const all = [];
   let token = "";
