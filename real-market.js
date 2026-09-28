@@ -174,7 +174,46 @@ async function fetchOptionChain(symbol, round) {
   }).filter(o => Number.isFinite(o.strike) && Number.isFinite(o.expiration));
 }
 
+async function refreshOptionPositions(players, round) {
+  const positions = [];
+  for (const player of Object.values(players)) {
+    for (const option of player.options || []) {
+      if (option.contractSymbol) positions.push({ player, option });
+    }
+  }
+  if (!positions.length) return;
+
+  const unique = [...new Set(positions.map(x => x.option.contractSymbol))];
+  const snapshots = await fetchOptionSnapshots("", unique);
+
+  for (const { option } of positions) {
+    const snap = snapshots.get(option.contractSymbol);
+    if (!snap) continue;
+
+    const bid = Number(snap.latestQuote?.bp);
+    const ask = Number(snap.latestQuote?.ap);
+    const last = Number(snap.latestTrade?.p);
+    const mark = Number.isFinite(bid) && Number.isFinite(ask)
+      ? (bid + ask) / 2
+      : Number.isFinite(last) ? last : null;
+
+    if (Number.isFinite(mark)) option.marketPrice = round(mark);
+    if (Number.isFinite(option.marketPrice)) {
+      option.bid = Number.isFinite(bid) ? round(bid) : option.bid;
+      option.ask = Number.isFinite(ask) ? round(ask) : option.ask;
+    }
+
+    const greeks = snap.greeks || {};
+    if (Number.isFinite(Number(greeks.iv))) option.iv = Number(greeks.iv) * 100;
+    if (Number.isFinite(Number(greeks.delta))) option.delta = Number(greeks.delta);
+    if (Number.isFinite(Number(greeks.gamma))) option.gamma = Number(greeks.gamma);
+    if (Number.isFinite(Number(greeks.theta))) option.theta = Number(greeks.theta);
+    if (Number.isFinite(Number(greeks.vega))) option.vega = Number(greeks.vega);
+  }
+}
+
 module.exports = {
   refreshMarket,
-  fetchOptionChain
+  fetchOptionChain,
+  refreshOptionPositions
 };
