@@ -2,6 +2,8 @@ const https = require("https");
 
 const DATA_HOST = "data.alpaca.markets";
 const TRADING_HOST = process.env.ALPACA_TRADING_HOST || "api.alpaca.markets";
+const STOCK_FEED = process.env.ALPACA_STOCK_FEED || "iex";
+const OPTION_FEED = process.env.ALPACA_OPTION_FEED || "indicative";
 const KEY = process.env.ALPACA_API_KEY;
 const SECRET = process.env.ALPACA_API_SECRET;
 
@@ -42,7 +44,7 @@ async function refreshMarket(market, symbols, round) {
   const names = Object.keys(symbols);
   const data = await request(
     DATA_HOST,
-    "/v2/stocks/snapshots?symbols=" + encodeURIComponent(names.join(",")) + "&feed=sip"
+    "/v2/stocks/snapshots?symbols=" + encodeURIComponent(names.join(",")) + "&feed=" + encodeURIComponent(STOCK_FEED)
   );
 
   for (const symbol of names) {
@@ -108,7 +110,7 @@ async function fetchOptionSnapshots(symbol, contractSymbols) {
     const batch = contractSymbols.slice(i, i + 100);
     const query = new URLSearchParams({
       symbols: batch.join(","),
-      feed: "opra",
+      feed: OPTION_FEED,
       limit: String(batch.length)
     });
 
@@ -169,7 +171,8 @@ async function fetchOptionChain(symbol, round) {
       volume: null,
       openInterest: Number.isFinite(Number(contract.open_interest)) ? Number(contract.open_interest) : null,
       size: Number(contract.size) || 100,
-      updatedAt: quote?.t || trade?.t || null
+      updatedAt: quote?.t || trade?.t || null,
+      feed: OPTION_FEED
     };
   }).filter(o => Number.isFinite(o.strike) && Number.isFinite(o.expiration));
 }
@@ -209,6 +212,7 @@ async function refreshOptionPositions(players, round) {
     if (Number.isFinite(Number(greeks.gamma))) option.gamma = Number(greeks.gamma);
     if (Number.isFinite(Number(greeks.theta))) option.theta = Number(greeks.theta);
     if (Number.isFinite(Number(greeks.vega))) option.vega = Number(greeks.vega);
+    option.marketDataFeed = OPTION_FEED;
   }
 }
 
