@@ -1,7 +1,7 @@
 const https = require("https");
 
 const DATA_HOST = "data.alpaca.markets";
-const TRADING_HOST = process.env.ALPACA_TRADING_HOST || "api.alpaca.markets";
+const TRADING_HOST = process.env.ALPACA_TRADING_HOST || "paper-api.alpaca.markets";
 const STOCK_FEED = process.env.ALPACA_STOCK_FEED || "iex";
 const OPTION_FEED = process.env.ALPACA_OPTION_FEED || "indicative";
 const KEY = process.env.ALPACA_API_KEY;
@@ -30,7 +30,7 @@ function request(hostname, path) {
       res.on("data", chunk => { body += chunk; });
       res.on("end", () => {
         if (res.statusCode < 200 || res.statusCode >= 300) {
-          return reject(new Error("Alpaca HTTP " + res.statusCode + ": " + body.slice(0, 300)));
+          return reject(new Error("Alpaca HTTP " + res.statusCode + " [" + hostname + path.split("?")[0] + "]: " + body.slice(0, 300)));
         }
         try { resolve(JSON.parse(body)); } catch (err) { reject(err); }
       });
