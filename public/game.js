@@ -92,6 +92,15 @@ async function openRadar(){
     document.querySelectorAll(".radar-click").forEach(e=>e.onclick=()=>{selectSymbol(e.dataset.symbol);d.classList.add("hidden")});
   }catch(e){$("radarBody").innerHTML='<div class="empty">'+esc(e.message)+'</div>'}
 }
+function outlookRow(x){
+  const cls=x.return30>0?"up":x.return30<0?"down":"flat";
+  const price=x.ask!=null?x.ask:null;
+  return '<button class="radar-row" data-symbol="'+esc(x.symbol)+'"><span><b>'+esc(x.symbol)+'</b><small>'+esc(x.name||"")+' · 30D '+(x.return30>=0?"+":"")+Number(x.return30||0).toFixed(2)+'%</small></span><span class="radar-right"><b class="'+cls+'">'+(x.contractSymbol?esc(x.contractSymbol):"No option")+'</b><small>'+ (price!=null?money(price)+" · ":"") +'score '+(x.setupScore??"—")+'</small></span></button>';
+}
+function unusualRow(x){
+  const cls=x.type==="call"?"up":"down";
+  return '<button class="radar-row" data-symbol="'+esc(x.symbol)+'"><span><b>'+esc(x.symbol)+' · '+esc(x.type.toUpperCase())+'</b><small>'+esc(x.contractSymbol)+' · '+(x.days??"—")+'d</small></span><span class="radar-right"><b class="'+cls+'">'+Number(x.volume||0).toLocaleString()+' vol</b><small>'+ (x.volumeOiRatio!=null?esc(x.volumeOiRatio)+"× OI":"OI —") +' · score '+esc(x.unusualScore)+'</small></span></button>';
+}
 async function drawer(screen){
   const d=$("drawer"),b=$("drawerContent");
   d.classList.remove("hidden");
@@ -105,7 +114,25 @@ async function drawer(screen){
   }else if(screen==="news"){
     b.innerHTML='<div class="drawer-body">Loading Alpaca news…</div>';
     try{const m=await api("/api/news?symbol="+encodeURIComponent(state.selected));b.innerHTML='<div class="drawer-body">'+(m.news||[]).map(n=>'<div class="news-item"><b>'+esc(n.headline)+'</b><small>'+esc(n.source||"Alpaca")+" · "+new Date(n.createdAt).toLocaleString()+'</small><p>'+esc(n.summary||"")+'</p></div>').join("")+'</div>'}catch(e){b.innerHTML='<div class="drawer-body">'+esc(e.message)+'</div>'}
-  }else if(screen==="radar"){await openRadar();return;}else if(screen==="missions"){
+  }else if(screen==="radar"){await openRadar();return;
+  }else if(screen==="outlook"){
+    b.innerHTML='<div class="drawer-body"><div class="radar-note">30-DAY OPTION OUTLOOK. Uses real Alpaca daily price history plus real option liquidity, spread, delta and premium data. Scores are analytics, not guaranteed return predictions.</div><div id="outlookBody">Loading 30-day history…</div></div>';
+    try{
+      const r=await api("/api/outlook");
+      const rows=(r.stocks||[]).map(outlookRow).join("")||'<div class="empty">No qualifying real Alpaca option setups were returned.</div>';
+      $("outlookBody").innerHTML='<div class="radar-section"><h3>30-DAY HIGH-RETURN SETUPS</h3><p class="radar-help">Sorted by historical momentum and current option pricing/liquidity fit. A high score does not guarantee a high return.</p>'+rows+'</div><div class="radar-foot">Updated '+new Date(r.updatedAt).toLocaleTimeString()+' · '+esc(r.source||"Alpaca")+'</div>';
+      document.querySelectorAll("#outlookBody .radar-row").forEach(e=>e.onclick=()=>{selectSymbol(e.dataset.symbol);d.classList.add("hidden")});
+    }catch(e){$("outlookBody").innerHTML='<div class="empty">'+esc(e.message)+'</div>'}
+  }else if(screen==="volume"){
+    b.innerHTML='<div class="drawer-body"><div class="radar-note">UNUSUAL OPTION VOLUME. Real Alpaca option volume ranked against open interest when available. Volume alone does not reveal whether trades were buys or sells.</div><div id="volumeBody">Loading unusual call/put volume…</div></div>';
+    try{
+      const r=await api("/api/unusual-volume");
+      const calls=(r.calls||[]).map(unusualRow).join("")||'<div class="empty">No unusual call volume returned.</div>';
+      const puts=(r.puts||[]).map(unusualRow).join("")||'<div class="empty">No unusual put volume returned.</div>';
+      $("volumeBody").innerHTML='<div class="radar-section"><h3>UNUSUAL HIGH-VOLUME CALLS</h3>'+calls+'</div><div class="radar-section"><h3>UNUSUAL HIGH-VOLUME PUTS</h3>'+puts+'</div><div class="radar-foot">Updated '+new Date(r.updatedAt).toLocaleTimeString()+' · '+esc(r.source||"Alpaca")+'</div>';
+      document.querySelectorAll("#volumeBody .radar-row").forEach(e=>e.onclick=()=>{selectSymbol(e.dataset.symbol);d.classList.add("hidden")});
+    }catch(e){$("volumeBody").innerHTML='<div class="empty">'+esc(e.message)+'</div>'}
+  }else if(screen==="missions"){
     const m=state.player?.missions||{};
     b.innerHTML='<div class="drawer-body">'+[["firstTrade","Complete your first trade"],["cityTour","Explore Market City"],["profitGoal","Reach $110,000 portfolio value"]].map(x=>'<div class="mission"><span>'+x[1]+'</span><b>'+(m[x[0]]?"DONE":"OPEN")+'</b></div>').join("")+'</div>';
   }else{
