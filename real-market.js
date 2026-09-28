@@ -8,46 +8,48 @@ const STOCK_FEED = process.env.ALPACA_STOCK_FEED || "iex";
 const OPTION_FEED = process.env.ALPACA_OPTION_FEED || "indicative";
 const KEY = process.env.ALPACA_API_KEY;
 const SECRET = process.env.ALPACA_API_SECRET;
-const STOCK_STREAM_HOST = "stream.data.alpaca.markets";
-const OPTION_STREAM_HOST = "stream.data.alpaca.markets";
-const stockSymbols = new Set();
-const optionSymbols = new Set();
-let stockStream = null;
-let optionStream = null;
-let streamMarket = null;
-let streamRound = null;
-let streamBroadcast = null;
-let optionCache = new Map();
-let stockReconnectTimer = null;
-let optionReconnectTimer = null;
-const MAX_BASIC_OPTION_STREAM_QUOTES = 200;
+const STOCK_STREAM = "wss://stream.data.alpaca.markets/v2/" + STOCK_FEED;
+const OPTION_STREAM = "wss://stream.data.alpaca.markets/v1beta1/" + OPTION_FEED;
 
-function requireCredentials() {
-  if (!KEY || !SECRET) {
-    throw new Error("Real market data is not configured: set ALPACA_API_KEY and ALPACA_API_SECRET on the server.");
-  }
+let stockWs = null;
+let optionWs = null;
+let stockSymbols = new Set();
+let optionSymbols = new Set();
+let marketRef = null;
+let roundRef = null;
+let broadcastRef = null;
+let stockReconnect = null;
+let optionReconnect = null;
+const optionLive = new Map();
+const chainCache = new Map();
+const expirationCache = new Map();
+const newsCache = { items: [], at: 0 };
+
+function credentials() {
+  if (!KEY || !SECRET) throw new Error("Alpaca credentials are missing on the server.");
 }
 
-function request(hostname, path) {
-  requireCredentials();
+function request(host, path) {
+  credentials();
   return new Promise((resolve, reject) => {
     const req = https.get({
-      hostname,
+      hostname: host,
       path,
       headers: {
         "APCA-API-KEY-ID": KEY,
         "APCA-API-SECRET-KEY": SECRET,
-        "Accept": "application/json"
+        Accept: "application/json"
       }
     }, res => {
       let body = "";
       res.setEncoding("utf8");
-      res.on("data", chunk => { body += chunk; });
+      res.on("data", c => body += c);
       res.on("end", () => {
         if (res.statusCode < 200 || res.statusCode >= 300) {
-          return reject(new Error("Alpaca HTTP " + res.statusCode + " [" + hostname + path.split("?")[0] + "]: " + body.slice(0, 300)));
+          reject(new Error("Alpaca HTTP " + res.statusCode + " [" + host + path.split("?")[0] + "]: " + body.slice(0, 400)));
+          return;
         }
-        try { resolve(JSON.parse(body)); } catch (err) { reject(err); }
+        try { resolve(JSON.parse(body)); } catch (e) { reject(e); }
       });
     });
     req.on("error", reject);
@@ -55,340 +57,293 @@ function request(hostname, path) {
   });
 }
 
-
-function streamAuth(ws) {
+function auth(ws) {
   ws.send(JSON.stringify({ action: "auth", key: KEY, secret: SECRET }));
 }
 
 function scheduleStockReconnect() {
-  if (stockReconnectTimer) return;
-  stockReconnectTimer = setTimeout(() => {
-    stockReconnectTimer = null;
-    connectStockStream();
-  }, 3000);
+  if (stockReconnect) return;
+  stockReconnect = setTimeout(() => { stockReconnect = null; connectStock(); }, 3000);
 }
 
 function scheduleOptionReconnect() {
-  if (optionReconnectTimer) return;
-  optionReconnectTimer = setTimeout(() => {
-    optionReconnectTimer = null;
-    connectOptionStream();
-  }, 3000);
+  if (optionReconnect) return;
+  optionReconnect = setTimeout(() => { optionReconnect = null; connectOptions(); }, 3000);
 }
 
-function connectStockStream() {
-  requireCredentials();
-  if (stockStream && (stockStream.readyState === WebSocket.OPEN || stockStream.readyState === WebSocket.CONNECTING)) return;
-  stockStream = new WebSocket("wss://" + STOCK_STREAM_HOST + "/v2/" + encodeURIComponent(STOCK_FEED));
-  stockStream.on("open", () => {
-    streamAuth(stockStream);
-  });
-  stockStream.on("message", raw => {
+function connectStock() {
+  credentials();
+  if (stockWs && (stockWs.readyState === WebSocket.OPEN || stockWs.readyState === WebSocket.CONNECTING)) return;
+  stockWs = new WebSocket(STOCK_STREAM);
+  stockWs.on("open", () => auth(stockWs));
+  stockWs.on("message", raw => {
     try {
-      const messages = JSON.parse(raw.toString());
-      for (const msg of messages) {
+      const msgs = JSON.parse(raw.toString());
+      for (const msg of msgs) {
         if (msg.T === "success" && msg.msg === "authenticated") {
-          stockStream.send(JSON.stringify({ action: "subscribe", trades: [...stockSymbols], quotes: [...stockSymbols] }));
-        } else if (msg.T === "subscription") {
-          continue;
-        } else if (msg.T === "q" || msg.T === "t") {
-          applyStockStreamMessage(msg);
+          stockWs.send(JSON.stringify({ action: "subscribe", trades: [...stockSymbols], quotes: [...stockSymbols], bars: [...stockSymbols] }));
+        } else if (msg.T === "t" || msg.T === "q" || msg.T === "b" || msg.T === "d" || msg.T === "u") {
+          applyStock(msg);
         }
       }
-    } catch (err) {
-      console.error("Alpaca stock stream message error:", err.message);
-    }
+    } catch (e) { console.error("Alpaca stock stream parse:", e.message); }
   });
-  stockStream.on("error", err => console.error("Alpaca stock stream error:", err.message));
-  stockStream.on("close", () => {
-    stockStream = null;
-    scheduleStockReconnect();
-  });
+  stockWs.on("error", e => console.error("Alpaca stock stream:", e.message));
+  stockWs.on("close", () => { stockWs = null; scheduleStockReconnect(); });
 }
 
-function applyStockStreamMessage(msg) {
-  if (!streamMarket || !streamRound) return;
-  const stock = streamMarket[msg.S];
+function applyStock(msg) {
+  const stock = marketRef?.[msg.S];
   if (!stock) return;
-  const price = msg.T === "q"
-    ? (Number.isFinite(Number(msg.ap)) ? Number(msg.ap) : Number(msg.bp))
-    : Number(msg.p);
-  if (!Number.isFinite(price) || price <= 0) return;
-  stock.price = streamRound(price);
-  stock.lastTradeAt = msg.t ? new Date(msg.t).getTime() : Date.now();
-  stock.realQuoteTime = stock.lastTradeAt;
+  const ts = msg.t ? Date.parse(msg.t) : Date.now();
+  if (msg.T === "q") {
+    const bid = Number(msg.bp), ask = Number(msg.ap);
+    if (Number.isFinite(bid) && bid > 0) stock.bid = bid;
+    if (Number.isFinite(ask) && ask > 0) stock.ask = ask;
+    const px = Number.isFinite(ask) && ask > 0 ? ask : bid;
+    if (Number.isFinite(px) && px > 0) stock.price = roundRef(px);
+  } else if (msg.T === "t") {
+    const px = Number(msg.p);
+    if (Number.isFinite(px) && px > 0) stock.price = roundRef(px);
+    stock.lastTradeAt = ts;
+  } else if (msg.T === "b" || msg.T === "d" || msg.T === "u") {
+    if (Number.isFinite(Number(msg.c))) stock.price = roundRef(Number(msg.c));
+    if (msg.T === "d" && Number.isFinite(Number(msg.o))) stock.open = roundRef(Number(msg.o));
+  }
+  stock.updatedAt = ts;
   stock.stream = true;
-  if (streamBroadcast) streamBroadcast();
+  if (Number.isFinite(stock.previousClose) && stock.previousClose !== 0) {
+    stock.change = roundRef(stock.price - stock.previousClose);
+    stock.changePct = roundRef(((stock.price - stock.previousClose) / stock.previousClose) * 100, 2);
+  }
+  broadcastRef?.({ type: "marketTick", stock: publicStock(stock) });
 }
 
-function connectOptionStream() {
-  requireCredentials();
-  if (optionStream && (optionStream.readyState === WebSocket.OPEN || optionStream.readyState === WebSocket.CONNECTING)) return;
-  optionStream = new WebSocket("wss://" + OPTION_STREAM_HOST + "/v1beta1/" + encodeURIComponent(OPTION_FEED));
-  optionStream.on("open", () => {
-    streamAuth(optionStream);
-  });
-  optionStream.on("message", raw => {
+function connectOptions() {
+  credentials();
+  if (optionWs && (optionWs.readyState === WebSocket.OPEN || optionWs.readyState === WebSocket.CONNECTING)) return;
+  optionWs = new WebSocket(OPTION_STREAM);
+  optionWs.on("open", () => auth(optionWs));
+  optionWs.on("message", raw => {
     try {
       const decoded = decode(Buffer.from(raw));
-      const messages = Array.isArray(decoded) ? decoded : [decoded];
-      for (const msg of messages) {
+      const msgs = Array.isArray(decoded) ? decoded : [decoded];
+      for (const msg of msgs) {
         if (!msg || typeof msg !== "object") continue;
         if (msg.T === "success" && msg.msg === "authenticated") {
-          if (optionSymbols.size) optionStream.send(JSON.stringify({ action: "subscribe", trades: [...optionSymbols], quotes: [...optionSymbols] }));
+          if (optionSymbols.size) subscribeOptions([...optionSymbols]);
         } else if (msg.T === "q" || msg.T === "t") {
-          applyOptionStreamMessage(msg);
+          applyOption(msg);
         }
       }
-    } catch (err) {
-      console.error("Alpaca option stream message error:", err.message);
-    }
+    } catch (e) { console.error("Alpaca option stream parse:", e.message); }
   });
-  optionStream.on("error", err => console.error("Alpaca option stream error:", err.message));
-  optionStream.on("close", () => {
-    optionStream = null;
-    scheduleOptionReconnect();
-  });
+  optionWs.on("error", e => console.error("Alpaca option stream:", e.message));
+  optionWs.on("close", () => { optionWs = null; scheduleOptionReconnect(); });
 }
 
-function applyOptionStreamMessage(msg) {
+function applyOption(msg) {
   const symbol = String(msg.S || "");
   if (!symbol) return;
-  const existing = optionCache.get(symbol) || {};
+  const o = optionLive.get(symbol) || {};
   if (msg.T === "q") {
-    existing.bid = Number.isFinite(Number(msg.bp)) ? Number(msg.bp) : existing.bid;
-    existing.ask = Number.isFinite(Number(msg.ap)) ? Number(msg.ap) : existing.ask;
-    existing.bidSize = Number.isFinite(Number(msg.bs)) ? Number(msg.bs) : existing.bidSize;
-    existing.askSize = Number.isFinite(Number(msg.as)) ? Number(msg.as) : existing.askSize;
-  } else if (msg.T === "t") {
-    existing.last = Number.isFinite(Number(msg.p)) ? Number(msg.p) : existing.last;
-    existing.tradeSize = Number.isFinite(Number(msg.s)) ? Number(msg.s) : existing.tradeSize;
+    if (Number.isFinite(Number(msg.bp))) o.bid = Number(msg.bp);
+    if (Number.isFinite(Number(msg.ap))) o.ask = Number(msg.ap);
+    o.bidSize = Number(msg.bs) || o.bidSize;
+    o.askSize = Number(msg.as) || o.askSize;
+  } else {
+    if (Number.isFinite(Number(msg.p))) o.last = Number(msg.p);
+    o.tradeSize = Number(msg.s) || o.tradeSize;
   }
-  existing.updatedAt = msg.t || existing.updatedAt;
-  existing.feed = OPTION_FEED;
-  optionCache.set(symbol, existing);
-  if (streamBroadcast) streamBroadcast({ type: "optionTick", contractSymbol: symbol, bid: existing.bid ?? null, ask: existing.ask ?? null, last: existing.last ?? null, updatedAt: existing.updatedAt || null });
+  o.updatedAt = msg.t || o.updatedAt || new Date().toISOString();
+  optionLive.set(symbol, o);
+  broadcastRef?.({
+    type: "optionTick",
+    contractSymbol: symbol,
+    bid: o.bid ?? null,
+    ask: o.ask ?? null,
+    last: o.last ?? null,
+    updatedAt: o.updatedAt
+  });
 }
 
-function startRealTimeStreams(market, symbols, round, broadcastFn) {
-  streamMarket = market;
-  streamRound = round;
-  streamBroadcast = broadcastFn;
-  Object.keys(symbols).forEach(symbol => stockSymbols.add(symbol));
-  connectStockStream();
-  connectOptionStream();
-}
-
-function subscribeOptionSymbols(contractSymbols) {
-  contractSymbols.forEach(symbol => optionSymbols.add(symbol));
-  if (optionStream && optionStream.readyState === WebSocket.OPEN) {
-    optionStream.send(JSON.stringify({ action: "subscribe", trades: contractSymbols, quotes: contractSymbols }));
+function subscribeOptions(symbols) {
+  const clean = [...new Set(symbols.filter(Boolean))];
+  clean.forEach(s => optionSymbols.add(s));
+  if (optionWs?.readyState === WebSocket.OPEN && clean.length) {
+    optionWs.send(JSON.stringify({ action: "subscribe", trades: clean, quotes: clean }));
   }
-}
-
-function getOptionStreamData(symbol) {
-  return optionCache.get(symbol) || null;
 }
 
 async function refreshMarket(market, symbols, round) {
   const names = Object.keys(symbols);
-  const data = await request(
-    DATA_HOST,
-    "/v2/stocks/snapshots?symbols=" + encodeURIComponent(names.join(",")) + "&feed=" + encodeURIComponent(STOCK_FEED)
-  );
-
+  const data = await request(DATA_HOST, "/v2/stocks/snapshots?symbols=" + encodeURIComponent(names.join(",")) + "&feed=" + encodeURIComponent(STOCK_FEED));
   for (const symbol of names) {
     const snap = data.snapshots?.[symbol];
     if (!snap) continue;
-
-    const trade = snap.latestTrade;
-    const quote = snap.latestQuote;
-    const daily = snap.dailyBar;
-    const previous = snap.prevDailyBar;
-    const price = Number(trade?.p ?? quote?.ap ?? quote?.bp);
-
-    if (!Number.isFinite(price) || price <= 0) continue;
-
     const stock = market[symbol];
-    stock.price = round(price);
-    if (Number.isFinite(Number(previous?.c))) stock.previousClose = round(Number(previous.c));
-    if (Number.isFinite(Number(daily?.o))) stock.open = round(Number(daily.o));
-    stock.change = Number.isFinite(stock.previousClose) ? round(stock.price - stock.previousClose) : null;
-    stock.changePct = Number.isFinite(stock.previousClose) && stock.previousClose
-      ? round((stock.change / stock.previousClose) * 100, 2) : null;
-    stock.lastTradeAt = trade?.t ? new Date(trade.t).getTime() : Date.now();
-    stock.realQuoteTime = quote?.t ? new Date(quote.t).getTime() : stock.lastTradeAt;
-
-    const minute = snap.minuteBar;
-    if (minute && Number.isFinite(Number(minute.c))) {
-      stock.history = [...(stock.history || []), round(Number(minute.c))].slice(-120);
-    } else {
-      stock.history = [stock.price];
+    const trade = snap.latestTrade || {};
+    const quote = snap.latestQuote || {};
+    const daily = snap.dailyBar || {};
+    const prev = snap.prevDailyBar || {};
+    const px = Number(trade.p ?? quote.ap ?? quote.bp);
+    if (Number.isFinite(px) && px > 0) stock.price = round(px);
+    if (Number.isFinite(Number(quote.bp))) stock.bid = round(Number(quote.bp));
+    if (Number.isFinite(Number(quote.ap))) stock.ask = round(Number(quote.ap));
+    if (Number.isFinite(Number(daily.o))) stock.open = round(Number(daily.o));
+    if (Number.isFinite(Number(prev.c))) stock.previousClose = round(Number(prev.c));
+    if (Number.isFinite(stock.price) && Number.isFinite(stock.previousClose)) {
+      stock.change = round(stock.price - stock.previousClose);
+      stock.changePct = round((stock.change / stock.previousClose) * 100, 2);
     }
+    stock.lastTradeAt = trade.t ? Date.parse(trade.t) : null;
+    stock.updatedAt = quote.t ? Date.parse(quote.t) : stock.lastTradeAt;
+    stock.history = stock.history || [];
+    if (Number.isFinite(stock.price)) stock.history.push(stock.price);
+    stock.history = stock.history.slice(-120);
   }
 }
 
-async function fetchContracts(symbol) {
-  const contracts = [];
-  let pageToken = "";
-
+async function fetchContracts(symbol, expirationDate) {
+  const all = [];
+  let token = "";
   do {
-    const query = new URLSearchParams({
+    const q = new URLSearchParams({
       underlying_symbols: symbol,
       status: "active",
-      expiration_date_gte: new Date().toISOString().slice(0, 10),
+      expiration_date_gte: new Date().toISOString().slice(0,10),
       limit: "10000"
     });
-    if (pageToken) query.set("page_token", pageToken);
-
-    const data = await request(
-      TRADING_HOST,
-      "/v2/options/contracts?" + query.toString()
-    );
-
-    contracts.push(...(data.option_contracts || []));
-    pageToken = data.page_token || "";
-  } while (pageToken);
-
-  return contracts;
+    if (expirationDate) {
+      q.delete("expiration_date_gte");
+      q.set("expiration_date", expirationDate);
+    }
+    if (token) q.set("page_token", token);
+    const data = await request(TRADING_HOST, "/v2/options/contracts?" + q.toString());
+    all.push(...(data.option_contracts || []));
+    token = data.page_token || "";
+  } while (token);
+  return all;
 }
 
-async function fetchOptionSnapshots(symbol, contractSymbols) {
-  const snapshots = new Map();
+function dateFromContract(c) { return c.expiration_date; }
 
-  for (let i = 0; i < contractSymbols.length; i += 100) {
-    const batch = contractSymbols.slice(i, i + 100);
-    const query = new URLSearchParams({
-      symbols: batch.join(","),
-      feed: OPTION_FEED,
-      limit: String(batch.length)
-    });
-
-    let pageToken = "";
-    do {
-      if (pageToken) query.set("page_token", pageToken);
-      const data = await request(
-        DATA_HOST,
-        "/v1beta1/options/snapshots?" + query.toString()
-      );
-      for (const [contractSymbol, snapshot] of Object.entries(data.snapshots || {})) {
-        snapshots.set(contractSymbol, snapshot);
-      }
-      pageToken = data.next_page_token || "";
-    } while (pageToken);
-  }
-
-  return snapshots;
+async function getExpirations(symbol) {
+  const key = symbol.toUpperCase();
+  const cached = expirationCache.get(key);
+  if (cached && cached.expires > Date.now()) return cached.items;
+  const contracts = await fetchContracts(key);
+  const items = [...new Set(contracts.map(dateFromContract).filter(Boolean))].sort();
+  expirationCache.set(key, { items, expires: Date.now() + 60000 });
+  return items;
 }
 
-async function fetchOptionChain(symbol, round) {
-  const contracts = await fetchContracts(symbol);
-  if (!contracts.length) return [];
+async function getOptionChain(symbol, expirationDate) {
+  symbol = symbol.toUpperCase();
+  const key = symbol + "|" + (expirationDate || "nearest");
+  const cached = chainCache.get(key);
+  if (cached && cached.expires > Date.now()) return cached.data;
 
-  // Basic Alpaca accounts allow up to 200 live option quote subscriptions.
-  // Keep the stream focused on the nearest contracts while the REST chain endpoint
-  // supplies the complete real chain without repeatedly requesting every snapshot.
-  const streamContracts = [...contracts]
-    .sort((a, b) => String(a.expiration_date).localeCompare(String(b.expiration_date)) || Number(a.strike_price) - Number(b.strike_price))
-    .slice(0, MAX_BASIC_OPTION_STREAM_QUOTES);
-  subscribeOptionSymbols(streamContracts.map(c => c.symbol));
+  const expirations = await getExpirations(symbol);
+  const expiration = expirationDate || expirations[0];
+  if (!expiration) return { expiration: null, chain: [] };
 
+  const contracts = await fetchContracts(symbol, expiration);
+  if (!contracts.length) return { expiration, chain: [] };
+
+  let token = "";
   const snapshots = new Map();
-  let pageToken = "";
   do {
-    const query = new URLSearchParams({ feed: OPTION_FEED, limit: "1000" });
-    if (pageToken) query.set("page_token", pageToken);
-    const data = await request(DATA_HOST, "/v1beta1/options/snapshots/" + encodeURIComponent(symbol) + "?" + query.toString());
-    for (const [contractSymbol, snapshot] of Object.entries(data.snapshots || {})) snapshots.set(contractSymbol, snapshot);
-    pageToken = data.next_page_token || "";
-  } while (pageToken);
+    const q = new URLSearchParams({ feed: OPTION_FEED, expiration_date: expiration, limit: "1000" });
+    if (token) q.set("page_token", token);
+    const data = await request(DATA_HOST, "/v1beta1/options/snapshots/" + encodeURIComponent(symbol) + "?" + q.toString());
+    for (const [s, snap] of Object.entries(data.snapshots || {})) snapshots.set(s, snap);
+    token = data.next_page_token || "";
+  } while (token);
 
   const now = Date.now();
-
-  return contracts.map(contract => {
-    const live = getOptionStreamData(contract.symbol) || {};
-    const snap = snapshots.get(contract.symbol) || {};
+  const chain = contracts.map(c => {
+    const snap = snapshots.get(c.symbol) || {};
+    const live = optionLive.get(c.symbol) || {};
     const quote = snap.latestQuote || {};
     const trade = snap.latestTrade || {};
-    const greeks = snap.greeks || {};
+    const g = snap.greeks || {};
     const bid = Number(live.bid ?? quote.bp);
     const ask = Number(live.ask ?? quote.ap);
     const last = Number(live.last ?? trade.p);
-
-    const expiration = new Date(contract.expiration_date + "T16:00:00-04:00").getTime();
-    const days = Math.max(0, Math.ceil((expiration - now) / 86400000));
-
+    const exp = Date.parse(c.expiration_date + "T23:59:59-04:00");
     return {
-      id: contract.id || contract.symbol,
+      id: c.id || c.symbol,
+      contractSymbol: c.symbol,
       symbol,
-      contractSymbol: contract.symbol,
-      type: contract.type,
-      strike: Number(contract.strike_price),
-      expiration,
-      expirationType: null,
-      days,
-      iv: Number.isFinite(Number(greeks.iv)) ? Number(greeks.iv) * 100 : null,
-      delta: Number.isFinite(Number(greeks.delta)) ? Number(greeks.delta) : null,
-      gamma: Number.isFinite(Number(greeks.gamma)) ? Number(greeks.gamma) : null,
-      theta: Number.isFinite(Number(greeks.theta)) ? Number(greeks.theta) : null,
-      vega: Number.isFinite(Number(greeks.vega)) ? Number(greeks.vega) : null,
-      last: Number.isFinite(last) ? round(last) : null,
-      bid: Number.isFinite(bid) ? round(bid) : null,
-      ask: Number.isFinite(ask) ? round(ask) : null,
-      mid: Number.isFinite(bid) && Number.isFinite(ask) ? round((bid + ask) / 2) : null,
-      volume: null,
-      openInterest: Number.isFinite(Number(contract.open_interest)) ? Number(contract.open_interest) : null,
-      size: Number(contract.size) || 100,
-      updatedAt: live.updatedAt || null,
+      type: c.type,
+      strike: Number(c.strike_price),
+      expiration: exp,
+      expirationDate: c.expiration_date,
+      days: Math.max(0, Math.ceil((exp - now) / 86400000)),
+      bid: finite(bid) ? round(bid) : null,
+      ask: finite(ask) ? round(ask) : null,
+      last: finite(last) ? round(last) : null,
+      mid: finite(bid) && finite(ask) ? round((bid + ask) / 2) : null,
+      delta: finite(g.delta) ? Number(g.delta) : null,
+      gamma: finite(g.gamma) ? Number(g.gamma) : null,
+      theta: finite(g.theta) ? Number(g.theta) : null,
+      vega: finite(g.vega) ? Number(g.vega) : null,
+      iv: finite(g.iv) ? Number(g.iv) * 100 : null,
+      volume: finite(snap.dailyBar?.v) ? Number(snap.dailyBar.v) : null,
+      openInterest: finite(c.open_interest) ? Number(c.open_interest) : null,
+      size: Number(c.size) || 100,
+      updatedAt: live.updatedAt || quote.t || trade.t || null,
       feed: OPTION_FEED
     };
-  }).filter(o => Number.isFinite(o.strike) && Number.isFinite(o.expiration));
+  }).filter(x => finite(x.strike));
+
+  subscribeOptions(chain.map(x => x.contractSymbol).slice(0, 200));
+  const result = { expiration, chain };
+  chainCache.set(key, { data: result, expires: Date.now() + 5000 });
+  return result;
 }
 
-async function refreshOptionPositions(players, round) {
-  const positions = [];
-  for (const player of Object.values(players)) {
-    for (const option of player.options || []) {
-      if (option.contractSymbol) positions.push({ player, option });
-    }
-  }
-  if (!positions.length) return;
-
-  const unique = [...new Set(positions.map(x => x.option.contractSymbol))];
-  const snapshots = await fetchOptionSnapshots("", unique);
-
-  for (const { option } of positions) {
-    const snap = snapshots.get(option.contractSymbol);
-    if (!snap) continue;
-
-    const bid = Number(snap.latestQuote?.bp);
-    const ask = Number(snap.latestQuote?.ap);
-    const last = Number(snap.latestTrade?.p);
-    const mark = Number.isFinite(bid) && Number.isFinite(ask)
-      ? (bid + ask) / 2
-      : Number.isFinite(last) ? last : null;
-
-    if (Number.isFinite(mark)) option.marketPrice = round(mark);
-    if (Number.isFinite(option.marketPrice)) {
-      option.bid = Number.isFinite(bid) ? round(bid) : option.bid;
-      option.ask = Number.isFinite(ask) ? round(ask) : option.ask;
-    }
-
-    const greeks = snap.greeks || {};
-    if (Number.isFinite(Number(greeks.iv))) option.iv = Number(greeks.iv) * 100;
-    if (Number.isFinite(Number(greeks.delta))) option.delta = Number(greeks.delta);
-    if (Number.isFinite(Number(greeks.gamma))) option.gamma = Number(greeks.gamma);
-    if (Number.isFinite(Number(greeks.theta))) option.theta = Number(greeks.theta);
-    if (Number.isFinite(Number(greeks.vega))) option.vega = Number(greeks.vega);
-    option.marketDataFeed = OPTION_FEED;
-  }
+async function getNews(symbols = []) {
+  if (!symbols.length && newsCache.items.length && newsCache.at > Date.now() - 15000) return newsCache.items;
+  const q = new URLSearchParams({ limit: "20", sort: "desc" });
+  if (symbols.length) q.set("symbols", symbols.join(","));
+  const data = await request(DATA_HOST, "/v1beta1/news?" + q.toString());
+  const items = (data.news || []).map(n => ({
+    id: n.id,
+    headline: n.headline,
+    summary: n.summary,
+    author: n.author,
+    createdAt: n.created_at,
+    url: n.url,
+    symbols: n.symbols || [],
+    source: n.source || "Alpaca"
+  }));
+  newsCache.items = items;
+  newsCache.at = Date.now();
+  return items;
 }
 
-module.exports = {
-  refreshMarket,
-  startRealTimeStreams,
-  subscribeOptionSymbols,
-  getOptionStreamData,
-  fetchOptionChain,
-  refreshOptionPositions
-};
+function finite(v) { return Number.isFinite(Number(v)); }
+function round(n, digits = 2) {
+  const p = 10 ** digits;
+  return Math.round(Number(n) * p) / p;
+}
+function publicStock(s) {
+  return {
+    symbol: s.symbol, name: s.name, price: finite(s.price) ? round(s.price) : null,
+    bid: finite(s.bid) ? round(s.bid) : null, ask: finite(s.ask) ? round(s.ask) : null,
+    open: finite(s.open) ? round(s.open) : null,
+    previousClose: finite(s.previousClose) ? round(s.previousClose) : null,
+    change: finite(s.change) ? round(s.change) : null,
+    changePct: finite(s.changePct) ? round(s.changePct,2) : null,
+    history: s.history || [], updatedAt: s.updatedAt || null, stream: !!s.stream, feed: STOCK_FEED, real: true
+  };
+}
+function start(market, symbols, round, broadcast) {
+  marketRef = market; roundRef = round; broadcastRef = broadcast;
+  stockSymbols = new Set(Object.keys(symbols));
+  connectStock();
+  connectOptions();
+}
+module.exports = { refreshMarket, start, getOptionChain, getExpirations, getNews, publicStock };
