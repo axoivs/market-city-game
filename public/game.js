@@ -19,14 +19,14 @@ const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") +
 const state = { player: null, market: [], others: [], leaderboard: [], online: 0, selected: "AAPL", options: [] };
 const keys = new Set();
 const buildings = [
-  {x:90,y:100,w:250,h:170,name:"STOCK EXCHANGE",kind:"exchange"},
-  {x:405,y:90,w:230,h:180,name:"NEWS CENTER",kind:"news"},
-  {x:700,y:95,w:240,h:165,name:"OPTIONS EXCHANGE",kind:"options"},
-  {x:1000,y:105,w:270,h:150,name:"BANK",kind:"bank"},
-  {x:105,y:390,w:280,h:180,name:"TRADING FLOOR",kind:"trading"},
-  {x:455,y:400,w:230,h:170,name:"PLAYER APARTMENTS",kind:"home"},
-  {x:760,y:390,w:250,h:180,name:"COMPANY HQ",kind:"hq"},
-  {x:1070,y:390,w:190,h:180,name:"RISK DISTRICT",kind:"risk"}
+  {x:155,y:72,w:255,h:160,name:"STOCK EXCHANGE",kind:"exchange"},
+  {x:455,y:72,w:235,h:160,name:"NEWS CENTER",kind:"news"},
+  {x:735,y:72,w:250,h:160,name:"OPTIONS EXCHANGE",kind:"options"},
+  {x:1030,y:72,w:225,h:160,name:"BANK",kind:"bank"},
+  {x:150,y:385,w:270,h:165,name:"TRADING FLOOR",kind:"trading"},
+  {x:470,y:395,w:230,h:175,name:"PLAYER APARTMENTS",kind:"home"},
+  {x:750,y:385,w:255,h:175,name:"COMPANY HQ",kind:"hq"},
+  {x:1050,y:395,w:205,h:175,name:"RISK DISTRICT",kind:"risk"}
 ];
 
 const $ = id => document.getElementById(id);
@@ -101,23 +101,149 @@ function selectSymbol(sym){
   loadOptions();
 }
 
+function pxRect(x,y,w,h,fill,stroke){
+  ctx.fillStyle=fill;ctx.fillRect(Math.round(x),Math.round(y),Math.round(w),Math.round(h));
+  if(stroke){ctx.strokeStyle=stroke;ctx.strokeRect(Math.round(x)+.5,Math.round(y)+.5,Math.round(w)-1,Math.round(h)-1);}
+}
+function sidewalk(x,y,w,h){
+  pxRect(x,y,w,h,"#aebbd0","#8191aa");
+  ctx.fillStyle="#c5d0df";
+  for(let yy=y+8;yy<y+h;yy+=18) ctx.fillRect(x+4,yy,w-8,2);
+}
+function road(x,y,w,h){
+  pxRect(x,y,w,h,"#344c63","#253b51");
+  ctx.fillStyle="#7890a5";
+  if(w>h){
+    for(let xx=x+12;xx<x+w;xx+=46) ctx.fillRect(xx,y+h/2-2,24,4);
+  }else{
+    for(let yy=y+12;yy<y+h;yy+=46) ctx.fillRect(x+w/2-2,yy,4,24);
+  }
+}
+function windowTile(x,y,w=22,h=18){
+  pxRect(x,y,w,h,"#78b9dd","#405e80");
+  pxRect(x+3,y+3,w-6,5,"#a9def0");
+  pxRect(x+3,y+h-7,w-6,3,"#4c83aa");
+}
+function tree(x,y,scale=1){
+  ctx.save();ctx.translate(x,y);ctx.scale(scale,scale);
+  ctx.fillStyle="#775d45";ctx.fillRect(-3,7,6,14);
+  ctx.fillStyle="#3f7f55";ctx.beginPath();ctx.arc(0,2,15,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle="#67a866";ctx.beginPath();ctx.arc(-7,-4,9,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle="#83ba70";ctx.fillRect(-8,-11,7,5);
+  ctx.restore();
+}
+function car(x,y,body,vertical=false){
+  ctx.save();ctx.translate(x,y);
+  if(vertical) ctx.rotate(Math.PI/2);
+  pxRect(-10,-18,20,36,body,"#31465c");
+  pxRect(-7,-11,14,9,"#b5d8e7");
+  pxRect(-7,3,14,8,"#8fb9cf");
+  ctx.fillStyle="#dbe7ec";ctx.fillRect(-12,-12,3,7);ctx.fillRect(9,-12,3,7);
+  ctx.restore();
+}
+function flowerBed(x,y,w,h){
+  pxRect(x,y,w,h,"#4d8a59","#6b7c72");
+  for(let xx=x+10;xx<x+w-4;xx+=14){
+    ctx.fillStyle=(xx%2?"#f0b6b2":"#e8d17a");ctx.fillRect(xx,y+8,5,5);
+    ctx.fillStyle="#9fd06d";ctx.fillRect(xx+2,y+13,3,7);
+  }
+}
+function fountain(x,y){
+  ctx.fillStyle="#7088a3";ctx.fillRect(x-32,y-25,64,50);
+  ctx.fillStyle="#d6e1e9";ctx.fillRect(x-24,y-17,48,34);
+  ctx.fillStyle="#67b6dc";ctx.beginPath();ctx.arc(x,y,17,0,Math.PI*2);ctx.fill();
+  ctx.fillStyle="#b5e7f4";ctx.fillRect(x-3,y-24,6,12);ctx.fillRect(x-2,y-12,4,9);
+}
+function drawBuilding(b,i){
+  const palettes=[
+    ["#b8c4d6","#6e7e9b","#3e70b7"],
+    ["#d5dbe3","#74839d","#4d86c7"],
+    ["#c5d0dc","#71829c","#4778b8"],
+    ["#d6dce4","#7d8da5","#4c83bf"]
+  ][i%4];
+  const [wall,roof,accent]=palettes;
+  pxRect(b.x,b.y,b.w,b.h,wall,"#566a86");
+  pxRect(b.x-5,b.y-5,b.w+10,13,roof,"#445773");
+  pxRect(b.x+8,b.y+18,b.w-16,22,accent,"#355779");
+  ctx.fillStyle="#eef2f5";ctx.font="bold 12px monospace";ctx.textAlign="center";
+  ctx.fillText(b.name,b.x+b.w/2,b.y+33);
+  ctx.textAlign="left";
+  const cols=Math.max(3,Math.floor((b.w-30)/34));
+  for(let row=0;row<3;row++){
+    for(let col=0;col<cols;col++){
+      const wx=b.x+16+col*34, wy=b.y+54+row*30;
+      windowTile(wx,wy,23,19);
+    }
+  }
+  pxRect(b.x+b.w/2-19,b.y+b.h-44,38,44,"#7d5948","#4d4650");
+  pxRect(b.x+b.w/2-13,b.y+b.h-38,26,6,"#8dbddd");
+  ctx.fillStyle="#cfd8e2";ctx.fillRect(b.x+10,b.y+b.h-8,b.w-20,4);
+}
 function drawCity(){
   ctx.clearRect(0,0,canvas.width,canvas.height);
-  ctx.fillStyle="#0d1620";ctx.fillRect(0,0,canvas.width,canvas.height);
-  ctx.strokeStyle="#152333";ctx.lineWidth=1;
-  for(let x=0;x<canvas.width;x+=40){ctx.beginPath();ctx.moveTo(x,0);ctx.lineTo(x,canvas.height);ctx.stroke()}
-  for(let y=0;y<canvas.height;y+=40){ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(canvas.width,y);ctx.stroke()}
-  ctx.fillStyle="#172332";ctx.fillRect(0,300,canvas.width,55);ctx.fillRect(0,615,canvas.width,55);
-  ctx.fillStyle="#26384a";ctx.fillRect(0,323,canvas.width,9);ctx.fillRect(0,638,canvas.width,9);
-  buildings.forEach((b,i)=>{
-    ctx.fillStyle=i%2?"#172330":"#182737";ctx.fillRect(b.x,b.y,b.w,b.h);
-    ctx.strokeStyle="#365067";ctx.strokeRect(b.x,b.y,b.w,b.h);
-    ctx.fillStyle="#27b3ff";ctx.fillRect(b.x+14,b.y+14,b.w-28,5);
-    ctx.fillStyle="#e2e9f2";ctx.font="bold 14px system-ui";ctx.fillText(b.name,b.x+16,b.y+45);
-    ctx.fillStyle="#536a80";ctx.font="11px system-ui";ctx.fillText("ENTER",b.x+16,b.y+b.h-18);
-    for(let wx=b.x+18;wx<b.x+b.w-20;wx+=30){for(let wy=b.y+62;wy<b.y+b.h-32;wy+=28){ctx.fillStyle="#213c4f";ctx.fillRect(wx,wy,14,11)}}
-  });
-  ctx.fillStyle="#0b1119";ctx.font="bold 12px system-ui";ctx.fillText("MARKET CITY",24,26);
+  ctx.imageSmoothingEnabled=false;
+
+  // Warm pastel grass-and-stone city base.
+  pxRect(0,0,canvas.width,canvas.height,"#7189ad");
+  // Main streets and intersections.
+  road(0,270,canvas.width,74);
+  road(0,650,canvas.width,110);
+  road(35,0,88,760);
+  road(1270,0,90,760);
+
+  // Sidewalk ribbons around the neighborhoods.
+  sidewalk(0,246,canvas.width,24);
+  sidewalk(0,344,canvas.width,24);
+  sidewalk(0,620,canvas.width,30);
+  sidewalk(0,0,34,760);
+  sidewalk(123,0,18,760);
+  sidewalk(1252,0,18,760);
+
+  // Crosswalks.
+  for(let x=245;x<360;x+=22) pxRect(x,337,13,7,"#e8edf1");
+  for(let x=880;x<995;x+=22) pxRect(x,337,13,7,"#e8edf1");
+  for(let y=548;y<620;y+=18) pxRect(125, y, 8, 12,"#e8edf1");
+  for(let y=548;y<620;y+=18) pxRect(1258, y, 8, 12,"#e8edf1");
+
+  // Green parks and planted strips.
+  pxRect(0,35,140,190,"#83aa6c","#638b62");
+  pxRect(1000,245,250,105,"#83aa6c","#638b62");
+  pxRect(0,350,140,255,"#7fa66b","#638b62");
+  pxRect(1010,585,245,36,"#80a56b","#638b62");
+  flowerBed(145,585,110,25);
+  flowerBed(705,585,120,25);
+  flowerBed(1015,350,90,22);
+
+  // Paved pedestrian lanes.
+  for(let x=420;x<470;x+=12) pxRect(x,350,8,260,"#8295b1");
+  for(let x=700;x<745;x+=12) pxRect(x,350,8,260,"#8295b1");
+  for(let y=360;y<620;y+=20) pxRect(430,y,30,12,"#91a4bd");
+
+  // City landmarks and street furniture.
+  fountain(1120,510);
+  for(const t of [[62,55],[95,205],[18,415],[112,535],[1030,300],[1205,305],[1280,585],[965,600],[690,610]]) tree(t[0],t[1],1);
+  for(const c of [[205,705,"#ef6f73"],[285,705,"#78a9dc"],[375,705,"#7fca70"],[1145,705,"#ef7d80"],[1215,705,"#7eb5df"]]) car(c[0],c[1],c[2]);
+  car(74,390,"#e96f70",true);car(74,455,"#78a9dc",true);car(74,520,"#7fca70",true);
+  pxRect(315,600,78,12,"#8a634d","#594c48");
+  pxRect(320,604,68,4,"#bd8a63");
+  pxRect(1160,255,68,10,"#8a634d","#594c48");
+
+  // Buildings with the chunky, colorful top-down look from the reference.
+  buildings.forEach(drawBuilding);
+
+  // Foreground plaza accents.
+  flowerBed(425,205,85,24);
+  flowerBed(990,205,100,24);
+  for(const [x,y] of [[430,225],[705,225],[1020,225],[430,580],[705,580],[1020,580]]) {
+    ctx.fillStyle="#c8d5df";ctx.fillRect(x,y,5,5);
+    ctx.fillStyle="#6f8ba0";ctx.fillRect(x+1,y-9,3,9);
+  }
+
+  // Pixel-art title plaque.
+  pxRect(16,14,142,30,"#d4dbe3","#4e6480");
+  pxRect(21,19,132,20,"#5d7698","#3c4d67");
+  ctx.fillStyle="#f2f4f5";ctx.font="bold 12px monospace";ctx.fillText("MARKET CITY",31,33);
+
   if(state.player) drawPlayer(state.player,true);
   state.others.forEach(p=>{if(!state.player||p.id!==state.player.id)drawPlayer(p,false)});
 }
