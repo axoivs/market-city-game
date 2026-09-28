@@ -10,6 +10,7 @@ const HOST = process.env.HOST || "0.0.0.0";
 const PUBLIC = path.join(__dirname, "public");
 const DATA_DIR = path.join(__dirname, "data");
 const PLAYERS_FILE = path.join(DATA_DIR, "players.json");
+const ACCOUNTS_FILE = path.join(DATA_DIR, "accounts.json");
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const SYMBOLS = {
@@ -24,6 +25,7 @@ for (const [symbol,name] of Object.entries(SYMBOLS)) {
 }
 
 const players = loadPlayers();
+const accounts = loadAccounts();
 const sockets = new Map();
 const recentTrades = [];
 let marketReady = false;
@@ -36,16 +38,21 @@ function savePlayers() {
   fs.writeFileSync(tmp,JSON.stringify(players,null,2));
   fs.renameSync(tmp,PLAYERS_FILE);
 }
+function loadAccounts(){try{return JSON.parse(fs.readFileSync(ACCOUNTS_FILE,"utf8"));}catch{return {};}}
+function saveAccounts(){const tmp=ACCOUNTS_FILE+".tmp";fs.writeFileSync(tmp,JSON.stringify(accounts,null,2));fs.renameSync(tmp,ACCOUNTS_FILE);}
+function normalizeWatchlist(list){return [...new Set((Array.isArray(list)?list:[]).map(x=>String(x||"").toUpperCase().replace(/[^A-Z0-9.-]/g,"")).filter(Boolean))].slice(0,50);}
+function accountKey(v){return String(v||"").trim().toLowerCase();}
+function validAccountName(v){return /^[a-z0-9][a-z0-9_-]{2,23}$/i.test(String(v||"").trim());}
 function round(n,d=2){const p=10**d;return Math.round(Number(n)*p)/p;}
 function finite(n){return n!==null&&n!==undefined&&n!==""&&Number.isFinite(Number(n));}
 function safe(n,f=0){return finite(n)?Number(n):f;}
 function idValid(v){return /^[a-f0-9-]{20,80}$/i.test(String(v||""));}
 function newPlayer(id){return {
-  id,name:"Trader-"+id.slice(-4).toUpperCase(),cash:100000,xp:0,level:1,
-  positions:{},options:[],missions:{firstTrade:false,profitGoal:false,cityTour:false},
+  id,name:"Trader-"+id.slice(-4).toUpperCase(),username:"",cash:100000,xp:0,level:1,
+  positions:{},options:[],watchlist:Object.keys(SYMBOLS),missions:{firstTrade:false,profitGoal:false,cityTour:false},
   createdAt:Date.now(),updatedAt:Date.now()
 };}
-function player(id){if(!players[id]){players[id]=newPlayer(id);savePlayers();}return players[id];}
+function player(id){if(!players[id]){players[id]=newPlayer(id);savePlayers();}else if(!Array.isArray(players[id].watchlist)){players[id].watchlist=Object.keys(SYMBOLS);savePlayers();}return players[id];}
 
 function stockMark(symbol){
   const s=market[symbol];
@@ -60,8 +67,8 @@ function portfolioValue(p){
   return round(v);
 }
 function publicPlayer(p){
-  return {id:p.id,name:p.name,cash:round(p.cash),portfolioValue:portfolioValue(p),xp:p.xp,level:p.level,
-    positions:p.positions,options:(p.options||[]).map(o=>({...o,marketPrice:optionMark(o)})),missions:p.missions};
+  return {id:p.id,name:p.name,username:p.username||"",cash:round(p.cash),portfolioValue:portfolioValue(p),xp:p.xp,level:p.level,
+    watchlist:normalizeWatchlist(p.watchlist||[]),positions:p.positions,options:(p.options||[]).map(o=>({...o,marketPrice:optionMark(o)})),missions:p.missions};
 }
 function marketPayload(){return Object.values(market).map(real.publicStock);}
 function leaderboard(){return Object.values(players).map(p=>({name:p.name,value:portfolioValue(p),level:p.level}))
@@ -166,8 +173,26 @@ const server=http.createServer(async(req,res)=>{
       const news=await real.getNews(symbol?[symbol]:[]);return respond(res,200,{news,source:"Alpaca"});
     }
     if(u.pathname==="/api/action"&&req.method==="POST"){
-      const b=await readBody(req);const id=idValid(b.playerId)?b.playerId:crypto.randomUUID();const p=player(id);
+      const b=await readBody(req);
+      if(b.type==="createAccount"||b.type==="login"){
+        const username=String(b.username||"").trim(),key=accountKey(username),code=String(b.code||"");
+        if(!validAccountName(username))throw new Error("Username must be 3-24 letters, numbers, _ or -.");
+        if(code.length<6)throw new Error("Login code must be at least 6 characters.");
+        if(b.type==="createAccount"){
+          if(accounts[key])throw new Error("That username is already taken.");
+          const id=idValid(b.playerId)?b.playerId:crypto.randomUUID(),p=player(id);
+          p.username=username;p.name=username;p.watchlist=normalizeWatchlist(b.watchlist?.length?b.watchlist:p.watchlist);
+          accounts[key]={username,playerId:id,code,createdAt:Date.now()};
+          saveAccounts();savePlayers();
+          return respond(res,200,{playerId:id,player:publicPlayer(p),leaderboard:leaderboard(),online:sockets.size,marketReady});
+        }
+        const ac=accounts[key];if(!ac||ac.code!==code)throw new Error("Invalid username or login code.");
+        const p=player(ac.playerId);p.username=ac.username;p.watchlist=normalizeWatchlist(p.watchlist);p.updatedAt=Date.now();savePlayers();
+        return respond(res,200,{playerId:ac.playerId,player:publicPlayer(p),leaderboard:leaderboard(),online:sockets.size,marketReady});
+      }
+      const id=idValid(b.playerId)?b.playerId:crypto.randomUUID();const p=player(id);
       if(b.type==="hello"){const n=String(b.name||"").trim().slice(0,24);if(n)p.name=n.replace(/[^a-zA-Z0-9 _-]/g,"");savePlayers();}
+      else if(b.type==="saveWatchlist"){p.watchlist=normalizeWatchlist(b.watchlist);p.updatedAt=Date.now();savePlayers();}
       else if(b.type==="stockOrder")stockOrder(p,String(b.symbol||"").toUpperCase(),b.side,b.quantity);
       else if(b.type==="optionOrder")await optionOrder(p,b);
       else if(b.type==="tourComplete")mission(p,"cityTour");
