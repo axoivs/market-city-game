@@ -40,6 +40,28 @@ for (const [symbol, info] of Object.entries(SYMBOLS)) {
 }
 
 const players = loadPlayers();
+const MARKET_DATA_HOST = "query1.finance.yahoo.com";
+
+function fetchRealQuote(symbol) {
+  return new Promise((resolve, reject) => {
+    const req = https.get({
+      hostname: MARKET_DATA_HOST,
+      path: "/v8/finance/chart/" + encodeURIComponent(symbol) + "?interval=1m&range=1d",
+      headers: { "User-Agent": "Market-City/1.0" }
+    }, res => {
+      let body = "";
+      res.setEncoding("utf8");
+      res.on("data", chunk => { body += chunk; });
+      res.on("end", () => {
+        if (res.statusCode !== 200) return reject(new Error("Market data HTTP " + res.statusCode));
+        try { resolve(JSON.parse(body)); } catch (err) { reject(err); }
+      });
+    });
+    req.on("error", reject);
+    req.setTimeout(8000, () => req.destroy(new Error("Market data timeout")));
+  });
+}
+
 const sockets = new Map();
 const worldPlayers = new Map();
 
