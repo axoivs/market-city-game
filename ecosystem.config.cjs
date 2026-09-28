@@ -9,7 +9,10 @@ module.exports = {
     max_memory_restart: "700M",
     env: {
       NODE_ENV: "production",
-      PORT: "3000"
+      PORT: "3000",
+      ALPACA_TRADING_HOST: "paper-api.alpaca.markets",
+      ALPACA_STOCK_FEED: "iex",
+      ALPACA_OPTION_FEED: "indicative"
     }
   }]
 };
