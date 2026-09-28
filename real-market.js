@@ -715,12 +715,19 @@ async function getRadar() {
       quotedStocks: rows.length
     },
     stocks: rows,
-    up: rows.filter(x => x.trend === "UP")
-      .sort((a,b) => (b.changePct ?? -Infinity) - (a.changePct ?? -Infinity))
-      .slice(0, 8),
-    down: rows.filter(x => x.trend === "DOWN")
-      .sort((a,b) => (a.changePct ?? Infinity) - (b.changePct ?? Infinity))
-      .slice(0, 8),
+    // Always show the top 10 real movers in each direction. This keeps
+    // the Radar useful even when fewer than 10 stocks cross the UP/DOWN
+    // signal-score thresholds.
+    up: rows
+      .filter(x => finite(x.changePct) && x.changePct > 0)
+      .sort((a,b) => b.changePct - a.changePct)
+      .slice(0, 10)
+      .map(x => ({...x, trend: "UP"})),
+    down: rows
+      .filter(x => finite(x.changePct) && x.changePct < 0)
+      .sort((a,b) => a.changePct - b.changePct)
+      .slice(0, 10)
+      .map(x => ({...x, trend: "DOWN"})),
     setups: setups.sort((a,b) => b.setupScore - a.setupScore),
     bigActivity: bigActivity.sort((a,b) => b.notional - a.notional).slice(0, 12),
     methodology: {
