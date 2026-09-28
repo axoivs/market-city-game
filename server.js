@@ -37,7 +37,7 @@ function savePlayers() {
   fs.renameSync(tmp,PLAYERS_FILE);
 }
 function round(n,d=2){const p=10**d;return Math.round(Number(n)*p)/p;}
-function finite(n){return Number.isFinite(Number(n));}
+function finite(n){return n!==null&&n!==undefined&&n!==""&&Number.isFinite(Number(n));}
 function safe(n,f=0){return finite(n)?Number(n):f;}
 function idValid(v){return /^[a-f0-9-]{20,80}$/i.test(String(v||""));}
 function newPlayer(id){return {
