@@ -41,6 +41,27 @@ function renderOptionTicket(){const o=state.selectedContract;if(!o){$("selectedC
 function renderAll(){populate();renderHeader();renderWatchlist();renderQuote();renderChart();renderTicket();renderChain();renderOptionTicket()}
 function orderStock(side){send({type:"stockOrder",symbol:state.selected,side,quantity:Math.floor(Number($("shares").value))})}
 function orderOption(){const o=state.selectedContract;if(!o)return toast("Select an option contract first.");send({type:"optionOrder",symbol:o.symbol,type:o.type,contractSymbol:o.contractSymbol,quantity:Math.floor(Number($("contracts").value)),expirationDate:o.expirationDate})}
+function radarStockRow(x){
+  const cls=x.trend==="UP"?"up":x.trend==="DOWN"?"down":"flat";
+  return '<button class="radar-row radar-click" data-symbol="'+esc(x.symbol)+'"><span><b>'+esc(x.symbol)+'</b><small>'+money(x.price)+'</small></span><span class="radar-right"><b class="'+cls+'">'+(x.changePct>=0?"+":"")+Number(x.changePct||0).toFixed(2)+'%</b><small>'+x.trend+' · '+x.trendScore+'</small></span></button>';
+}
+function radarSetupRow(x){
+  return '<button class="radar-row radar-click" data-symbol="'+esc(x.symbol)+'"><span><b>'+esc(x.symbol)+'</b><small>'+esc(x.contractSymbol)+'</small></span><span class="radar-right"><b>'+money(x.ask)+'</b><small>'+esc(x.type)+' · '+(x.days??"—")+'d · score '+(x.setupScore??"—")+'</small></span></button>';
+}
+async function openRadar(){
+  const d=$("drawer"),b=$("drawerContent");
+  d.classList.remove("hidden");$("drawerTitle").textContent="MARKET RADAR";
+  b.innerHTML='<div class="drawer-body"><div class="radar-note">REAL-DATA SIGNAL ENGINE. Scores rank current conditions; they do not predict guaranteed returns.</div><div id="radarBody">Loading real market radar…</div></div>';
+  try{
+    const r=await api("/api/radar");
+    const up=(r.up||[]).map(radarStockRow).join("")||'<div class="empty">No current uptrend signals.</div>';
+    const down=(r.down||[]).map(radarStockRow).join("")||'<div class="empty">No current downtrend signals.</div>';
+    const setups=(r.setups||[]).map(radarSetupRow).join("")||'<div class="empty">No option setup passed the filters.</div>';
+    const big=(r.bigActivity||[]).map(x=>'<button class="radar-row radar-click" data-symbol="'+esc(x.symbol)+'"><span><b>'+esc(x.symbol)+'</b><small>'+esc(x.contractSymbol)+'</small></span><span class="radar-right"><b>'+money(x.notional)+'</b><small>'+Number(x.volume||0).toLocaleString()+' volume</small></span></button>').join("")||'<div class="empty">No large-activity flag right now.</div>';
+    $("radarBody").innerHTML='<div class="radar-section"><h3>TRENDING UP</h3>'+up+'</div><div class="radar-section"><h3>TRENDING DOWN</h3>'+down+'</div><div class="radar-section"><h3>OPTION SETUP TRACKER</h3><p class="radar-help">Favors liquidity, tighter spreads, near-0.50 delta and 14–45 days to expiration.</p>'+setups+'</div><div class="radar-section"><h3>LARGE OPTION ACTIVITY</h3><p class="radar-help">Flags large notional activity. A trade print does not prove whether it was bought or sold.</p>'+big+'</div><div class="radar-foot">Updated '+new Date(r.updatedAt).toLocaleTimeString()+' · '+esc(r.feed||"Alpaca")+'</div>';
+    document.querySelectorAll(".radar-click").forEach(e=>e.onclick=()=>{selectSymbol(e.dataset.symbol);d.classList.add("hidden")});
+  }catch(e){$("radarBody").innerHTML='<div class="empty">'+esc(e.message)+'</div>'}
+}
 async function drawer(screen){
   const d=$("drawer"),b=$("drawerContent");
   d.classList.remove("hidden");
@@ -54,7 +75,7 @@ async function drawer(screen){
   }else if(screen==="news"){
     b.innerHTML='<div class="drawer-body">Loading Alpaca news…</div>';
     try{const m=await api("/api/news?symbol="+encodeURIComponent(state.selected));b.innerHTML='<div class="drawer-body">'+(m.news||[]).map(n=>'<div class="news-item"><b>'+esc(n.headline)+'</b><small>'+esc(n.source||"Alpaca")+" · "+new Date(n.createdAt).toLocaleString()+'</small><p>'+esc(n.summary||"")+'</p></div>').join("")+'</div>'}catch(e){b.innerHTML='<div class="drawer-body">'+esc(e.message)+'</div>'}
-  }else if(screen==="missions"){
+  }else if(screen==="radar"){await openRadar();return;}else if(screen==="missions"){
     const m=state.player?.missions||{};
     b.innerHTML='<div class="drawer-body">'+[["firstTrade","Complete your first trade"],["cityTour","Explore Market City"],["profitGoal","Reach $110,000 portfolio value"]].map(x=>'<div class="mission"><span>'+x[1]+'</span><b>'+(m[x[0]]?"DONE":"OPEN")+'</b></div>').join("")+'</div>';
   }else{
