@@ -164,7 +164,7 @@ function renderOptionChain(expiration){
   chainEl.innerHTML=`
     <div class="chain-table-wrap"><table class="chain-table">
       <thead><tr><th colspan="7" class="call-group">CALLS · ${expLabel}</th><th class="strike-head">STRIKE</th><th colspan="7" class="put-group">PUTS · ${expLabel}</th></tr>
-      <tr><th>LAST</th><th>BID</th><th>ASK</th><th>IV</th><th>DELTA</th><th>VOL</th><th>OPEN INT</th><th class="strike-head">STRIKE</th><th>DELTA</th><th>IV</th><th>VOL</th><th>OPEN INT</th><th>BID</th><th>ASK</th><th>LAST</th></tr></thead>
+      <tr><th>LAST</th><th>BID</th><th>ASK</th><th>DELTA</th><th>VOL</th><th>OPEN INT</th><th class="strike-head">STRIKE</th><th>DELTA</th><th>VOL</th><th>OPEN INT</th><th>BID</th><th>ASK</th><th>LAST</th></tr></thead>
       <tbody>${htmlRows}</tbody></table></div>
     <div class="chain-note"><span>Calls left · puts right · click any contract to load it into the Trading Desk.</span><span>${strikes.length} strikes · ${rows.length} contracts · virtual pricing</span></div>`;
   $("chainSpot").textContent=`${state.selected} ${spot?money(spot):"—"}`;
