@@ -23,7 +23,28 @@ async function bootstrap(){try{apply(await api("/api/bootstrap?playerId="+encode
 function stock(){return state.market.find(x=>x.symbol===state.selected)}
 function populate(){const s=$("symbol");const q=String($("tickerSearch")?.value||"").trim().toLowerCase();const list=(state.assets.length?state.assets:state.market).filter(x=>!q||x.symbol.toLowerCase().includes(q)||String(x.name||"").toLowerCase().includes(q));s.innerHTML=list.map(x=>'<option value="'+esc(x.symbol)+'">'+esc(x.symbol)+" — "+esc(x.name)+"</option>").join("");s.value=state.selected}
 function renderHeader(){const p=state.player;if(!p)return;$("cash").textContent=money(p.cash);$("portfolio").textContent=money(p.portfolioValue);$("level").textContent=p.level}
-function renderWatchlist(){$("watchlist").innerHTML=state.market.map(s=>{const c=s.changePct>0?"up":s.changePct<0?"down":"flat";return '<button class="watch-row '+(s.symbol===state.selected?"active":"")+'" data-symbol="'+esc(s.symbol)+'"><span><span class="sym">'+esc(s.symbol)+'</span><span class="name">'+esc(s.name)+'</span></span><span class="px"><span class="price">'+px(s.price)+'</span><span class="'+c+'">'+(s.changePct==null?"—":(s.changePct>=0?"+":"")+Number(s.changePct).toFixed(2)+"%")+'</span></span></button>'}).join("");document.querySelectorAll(".watch-row").forEach(b=>b.onclick=()=>selectSymbol(b.dataset.symbol))}
+function renderWatchlist(){
+  $("watchlist").innerHTML=state.market.map(s=>{
+    const c=s.changePct>0?"up":s.changePct<0?"down":"flat";
+    return '<div class="watch-row '+(s.symbol===state.selected?"active":"")+'">'+
+      '<button class="watch-main" data-symbol="'+esc(s.symbol)+'"><span><span class="sym">'+esc(s.symbol)+'</span><span class="name">'+esc(s.name)+'</span></span>'+
+      '<span class="px"><span class="price">'+px(s.price)+'</span><span class="'+c+'">'+(s.changePct==null?"—":(s.changePct>=0?"+":"")+Number(s.changePct).toFixed(2)+"%")+'</span></span></button>'+
+      '<button class="watch-remove" data-remove="'+esc(s.symbol)+'" title="Remove '+esc(s.symbol)+'" aria-label="Remove '+esc(s.symbol)+'">×</button>'+
+      '</div>';
+  }).join("");
+  document.querySelectorAll(".watch-main").forEach(b=>b.onclick=()=>selectSymbol(b.dataset.symbol));
+  document.querySelectorAll(".watch-remove").forEach(b=>b.onclick=e=>{
+    e.stopPropagation();
+    const symbol=b.dataset.remove;
+    state.market=state.market.filter(x=>x.symbol!==symbol);
+    if(state.selected===symbol){
+      state.selected=state.market[0]?.symbol||"";
+      if(state.selected) selectSymbol(state.selected);
+    }
+    renderWatchlist();
+    if(!state.market.length) toast("Market Watch is empty. Search for a stock to add it.");
+  });
+}
 function renderQuote(){const s=stock();if(!s)return;$("selectedSymbol").textContent=s.symbol;$("selectedName").textContent=s.name;$("selectedPrice").textContent=px(s.price);$("bid").textContent=px(s.bid);$("ask").textContent=px(s.ask);$("change").textContent=s.change==null?"—":px(s.change)+" "+(s.changePct>=0?"+":"")+Number(s.changePct||0).toFixed(2)+"%";$("change").className=s.change>0?"up":s.change<0?"down":"";$("prevClose").textContent=px(s.previousClose);$("feed").textContent=s.stream?"IEX STREAM":"IEX SNAPSHOT";$("optionSource").textContent="Alpaca "+(s.stream?"live stream":"latest snapshot")+" · real data"}
 function renderChart(){const c=$("priceChart"),ctx=c.getContext("2d"),d=devicePixelRatio||1,r=c.getBoundingClientRect(),w=Math.max(300,r.width),h=Math.max(100,r.height);c.width=w*d;c.height=h*d;ctx.setTransform(d,0,0,d,0,0);ctx.clearRect(0,0,w,h);const v=(stock()?.history||[]).filter(Number.isFinite);if(v.length<2){ctx.fillStyle="#62758a";ctx.font="11px sans-serif";ctx.fillText("Waiting for Alpaca price history…",14,28);return}const lo=Math.min(...v),hi=Math.max(...v),range=hi-lo||1,p=18;ctx.strokeStyle="#182737";for(let i=1;i<4;i++){const y=p+i*(h-p*2)/4;ctx.beginPath();ctx.moveTo(0,y);ctx.lineTo(w,y);ctx.stroke()}ctx.strokeStyle="#27b5ff";ctx.lineWidth=2;ctx.beginPath();v.forEach((x,i)=>{const xx=p+i*(w-2*p)/Math.max(1,v.length-1),yy=h-p-(x-lo)/range*(h-2*p);i?ctx.lineTo(xx,yy):ctx.moveTo(xx,yy)});ctx.stroke()}
 function renderTicket(){const s=stock();$("ticketPrice").textContent=px(s?.price);$("stockPosition").textContent=(state.player?.positions?.[state.selected]||0)+" shares held"}
