@@ -18,6 +18,64 @@ if (!playerId) {
 }
 const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "?playerId=" + encodeURIComponent(playerId));
 const state = { player: null, market: [], others: [], leaderboard: [], online: 0, selected: "AAPL", options: [] };
+
+async function httpBootstrap() {
+  try {
+    const r = await fetch("/api/bootstrap?playerId=" + encodeURIComponent(playerId) + "&_=" + Date.now(), {cache:"no-store"});
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const msg = await r.json();
+    state.player = msg.player;
+    state.market = msg.market || [];
+    state.leaderboard = msg.leaderboard || [];
+    state.online = msg.online || 0;
+    populateSymbols();
+    renderWatchlist();
+    renderHeader();
+    selectSymbol(state.selected);
+    drawCity();
+    return true;
+  } catch (err) {
+    console.error("HTTP bootstrap failed:", err);
+    return false;
+  }
+}
+
+async function httpAction(payload) {
+  const r = await fetch("/api/action", {
+    method: "POST",
+    headers: {"Content-Type":"application/json"},
+    body: JSON.stringify({...payload, playerId})
+  });
+  const data = await r.json();
+  if (!r.ok) throw new Error(data.error || "Request failed");
+  state.player = data.player;
+  state.market = data.market || state.market;
+  state.leaderboard = data.leaderboard || state.leaderboard;
+  state.online = data.online || 0;
+  renderWatchlist();
+  renderHeader();
+  selectSymbol(state.selected);
+  return data;
+}
+
+function startHttpMarketFallback() {
+  httpBootstrap();
+  setInterval(async () => {
+    try {
+      const r = await fetch("/api/market?_=" + Date.now(), {cache:"no-store"});
+      if (!r.ok) return;
+      const data = await r.json();
+      state.market = data.market || state.market;
+      state.leaderboard = data.leaderboard || state.leaderboard;
+      state.online = data.online || 0;
+      renderWatchlist();
+      renderHeader();
+      selectSymbol(state.selected);
+    } catch {}
+  }, 3000);
+}
+
+
 const keys = new Set();
 let moveTarget = null;
 const buildings = [
@@ -37,7 +95,13 @@ function toast(msg) {
   const el=$("toast"); el.textContent=msg; el.classList.add("show");
   clearTimeout(toast.t); toast.t=setTimeout(()=>el.classList.remove("show"),2200);
 }
-function send(obj){ if(ws.readyState===WebSocket.OPEN) ws.send(JSON.stringify(obj)); }
+function send(obj){
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    ws.send(JSON.stringify(obj));
+    return;
+  }
+  httpAction(obj).catch(err => toast(err.message || "Request failed"));
+}
 
 function renderWatchlist(){
   $("watchlist").innerHTML = state.market.map(s=>{
@@ -309,6 +373,8 @@ document.querySelectorAll(".menu-btn").forEach(btn=>btn.onclick=()=>{
 });
 
 drawCity();
+
+startHttpMarketFallback();
 
 loadOptions().catch(err => {
   console.error("Market City option chain failed:", err);
