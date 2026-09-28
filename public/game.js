@@ -21,12 +21,22 @@ let reconnectTimer = null;
 let reconnectDelay = 1000;
 let reconnectGeneration = 0;
 
+const state = {
+  player: null,
+  market: [],
+  others: [],
+  leaderboard: [],
+  online: 0,
+  selected: "AAPL",
+  options: []
+};
+
 function connectWebSocket() {
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
 
   const generation = ++reconnectGeneration;
-  const url = (location.protocol === "https:" ? "wss://" : "ws://")
-    + location.host + "?playerId=" + encodeURIComponent(playerId);
+  const protocol = location.protocol === "https:" ? "wss://" : "ws://";
+  const url = protocol + location.host + "?playerId=" + encodeURIComponent(playerId);
 
   try {
     ws = new WebSocket(url);
@@ -36,13 +46,80 @@ function connectWebSocket() {
   }
 
   ws.addEventListener("open", () => {
-    if (generation !== reconnectGeneration) return;
+    if (generation !== reconnectGeneration || ws?.readyState !== WebSocket.OPEN) return;
     reconnectDelay = 1000;
-    toast("Connected");
-    try { ws.send(JSON.stringify({type:"hello"})); } catch {}
+    try {
+      ws.send(JSON.stringify({
+        type: "hello",
+        name: localStorage.getItem("marketCityName") || ""
+      }));
+    } catch {}
   });
 
-  
+  ws.addEventListener("message", handleSocketMessage);
+
+  ws.addEventListener("error", () => {
+    // The close event performs the reconnect. Avoid duplicate error toasts.
+  });
+
+  ws.addEventListener("close", () => {
+    if (generation !== reconnectGeneration) return;
+    ws = null;
+    scheduleReconnect();
+  });
+}
+
+function scheduleReconnect() {
+  if (reconnectTimer) return;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    connectWebSocket();
+    reconnectDelay = Math.min(reconnectDelay * 2, 15000);
+  }, reconnectDelay);
+}
+
+function handleSocketMessage(event) {
+  try {
+    const msg = JSON.parse(event.data);
+
+    if (msg.type === "state") {
+      state.player = msg.player;
+      state.market = msg.market;
+      state.leaderboard = msg.leaderboard;
+      state.online = msg.online;
+      renderAll();
+    } else if (msg.type === "market") {
+      state.market = msg.market;
+      state.leaderboard = msg.leaderboard;
+      state.online = msg.online;
+      renderWatchlist();
+      renderHeader();
+      selectSymbol(state.selected);
+    } else if (msg.type === "players") {
+      state.others = msg.players || [];
+    } else if (msg.type === "error") {
+      toast(msg.message);
+    }
+  } catch (err) {
+    console.error("Invalid server message:", err);
+  }
+}
+
+function send(msg) {
+  if (!ws || ws.readyState !== WebSocket.OPEN) {
+    connectWebSocket();
+    toast("Connecting to server...");
+    return;
+  }
+  try {
+    ws.send(JSON.stringify(msg));
+  } catch {
+    try { ws.close(); } catch {}
+  }
+}
+
+connectWebSocket();
+
 $("symbol").onchange=e=>selectSymbol(e.target.value);
 $("chainRefresh").onclick=()=>loadOptions().then(()=>toast("Options chain refreshed")).catch(()=>toast("Unable to refresh options chain"));
 $("contract").onchange=renderOptionInfo;
