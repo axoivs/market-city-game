@@ -1,74 +1,66 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1">
-  <title>Market City</title>
-  <link rel="stylesheet" href="/style.css">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Market City — Alpaca Live</title><link rel="stylesheet" href="/style.css">
 </head>
 <body>
-  <div id="app">
-    <header class="topbar">
-      <div class="brand"><span class="brand-mark">◆</span><span>MARKET CITY</span><small>REAL MARKET DATA</small></div>
-      <div class="account">
-        <span>Cash <b id="cash">$100,000</b></span>
-        <span>Portfolio <b id="portfolio">$100,000</b></span>
-        <span>Level <b id="level">1</b></span>
-        <button id="nameBtn" class="ghost">Trader</button>
-      </div>
-    </header>
+<div id="app">
+<header class="topbar">
+  <div class="brand"><span class="brand-mark">◆</span><strong>MARKET CITY</strong><span class="live-badge">ALPACA LIVE</span></div>
+  <div class="session"><span id="marketState" class="market-state">CONNECTING</span><span>Cash <b id="cash">$100,000.00</b></span><span>Portfolio <b id="portfolio">$100,000.00</b></span><span>Level <b id="level">1</b></span><button id="nameBtn" class="ghost">Trader</button></div>
+</header>
 
-    <main class="layout">
-      <aside class="panel watchlist">
-        <div class="panel-title">MARKET WATCH</div>
-        <div id="watchlist"></div>
-        <div class="hint">Real Alpaca market stream • live updates when the market is open.</div>
-      </aside>
+<main class="terminal">
+<aside class="panel watch">
+  <div class="panel-title">MARKET WATCH <span>REAL</span></div>
+  <div id="watchlist"></div>
+  <div class="panel-foot">Alpaca IEX stream • quotes/trades update live when available.</div>
+</aside>
 
-      <section class="world-wrap options-center"><div class="chain-head"><div><div class="chain-title">OPTIONS CHAIN</div><div class="chain-subtitle"><span id="chainSymbol">AAPL</span> · real Alpaca options data</div></div><div class="chain-live"><span class="live-dot"></span><span id="online">0 online</span></div></div><div class="expiration-bar"><span class="expiration-label">EXPIRATION</span><div id="expirationDates" class="expiration-dates"></div><button id="chainRefresh" class="chain-refresh" type="button">REFRESH</button></div><div class="chain-tools"><span>CALLS</span><span id="chainSpot">SPOT —</span><span>PUTS</span></div><div id="optionChain" class="option-chain"><div class="chain-loading">Loading option chain…</div></div><div id="toast" class="toast"></div></section>
-
-      <aside class="panel order-panel">
-        <div class="panel-title">TRADING DESK</div>
-        <label>Symbol<select id="symbol"></select></label>
-        <div id="quote" class="quote-card"></div>
-
-        <div class="tabs">
-          <button class="tab active" data-tab="stock">STOCK</button>
-          <button class="tab" data-tab="options">OPTIONS</button>
-        </div>
-
-        <div id="stockTab">
-          <label>Shares<input id="shares" type="number" min="1" value="10"></label>
-          <div class="order-buttons">
-            <button id="buyStock" class="buy">BUY</button>
-            <button id="sellStock" class="sell">SELL</button>
-          </div>
-        </div>
-
-        <div id="optionsTab" hidden>
-          <label>Contract<select id="contract"></select></label>
-          <label>Contracts<input id="contracts" type="number" min="1" max="100" value="1"></label>
-          <button id="buyOption" class="buy wide">BUY OPTION</button>
-          <div id="greeks" class="greeks"></div>
-        </div>
-
-        <div class="desk-note">All trades use virtual money. No real securities are purchased.</div>
-      </aside>
-    </main>
-
-    <nav class="menu">
-      <button class="menu-btn active" data-screen="city">CITY</button>
-      <button class="menu-btn" data-screen="portfolio">PORTFOLIO</button>
-      <button class="menu-btn" data-screen="news">NEWS</button>
-      <button class="menu-btn" data-screen="missions">MISSIONS</button>
-      <button class="menu-btn" data-screen="leaderboard">LEADERBOARD</button>
-    </nav>
-
-    <section id="drawer" class="drawer hidden">
-      <div class="drawer-head"><h2 id="drawerTitle">Portfolio</h2><button id="closeDrawer">×</button></div>
-      <div id="drawerContent"></div>
-    </section>
+<section class="center">
+  <div class="quote-row">
+    <div class="panel quote">
+      <div class="quote-head"><div><div class="eyebrow">SELECTED SECURITY</div><h1 id="selectedSymbol">AAPL</h1><div id="selectedName">Apple</div></div><div id="selectedPrice" class="big-price">—</div></div>
+      <div class="quote-stats"><div><span>Bid</span><b id="bid">—</b></div><div><span>Ask</span><b id="ask">—</b></div><div><span>Change</span><b id="change">—</b></div><div><span>Prev close</span><b id="prevClose">—</b></div><div><span>Feed</span><b id="feed">IEX</b></div></div>
+      <canvas id="priceChart" width="900" height="190"></canvas>
+    </div>
   </div>
-  <script src="/game.js"></script>
+
+  <div class="panel options">
+    <div class="section-head"><div><div class="eyebrow">OPTIONS</div><h2>LIVE OPTION CHAIN</h2><div id="optionSource" class="subtle">Alpaca</div></div><div class="option-actions"><select id="expirationDates"></select><button id="refreshOptions" class="ghost">REFRESH</button></div></div>
+    <div id="chainStatus" class="chain-status">Loading real option chain…</div>
+    <div id="optionChain" class="chain-wrap"></div>
+  </div>
+</section>
+
+<aside class="panel order">
+  <div class="panel-title">TRADING DESK <span>VIRTUAL</span></div>
+  <label>Symbol<select id="symbol"></select></label>
+  <div class="ticket-tabs"><button class="active" data-tab="stock">STOCK</button><button data-tab="option">OPTION</button></div>
+
+  <div id="stockTicket">
+    <div class="ticket-price" id="ticketPrice">—</div>
+    <label>Shares<input id="shares" type="number" min="1" value="10"></label>
+    <div class="order-buttons"><button id="buyStock" class="buy">BUY</button><button id="sellStock" class="sell">SELL</button></div>
+    <div id="stockPosition" class="position-note"></div>
+  </div>
+
+  <div id="optionTicket" hidden>
+    <div id="selectedContract" class="selected-contract">Select a call or put in the chain.</div>
+    <label>Contracts<input id="contracts" type="number" min="1" max="100" value="1"></label>
+    <button id="buyOption" class="buy wide">BUY OPTION</button>
+    <div id="optionDetails" class="details"></div>
+  </div>
+
+  <div class="desk-note">This game uses virtual cash. No order is sent to Alpaca. Market prices and option data come from Alpaca.</div>
+</aside>
+</main>
+
+<nav class="bottom-nav"><button class="active" data-screen="portfolio">PORTFOLIO</button><button data-screen="news">NEWS</button><button data-screen="missions">MISSIONS</button><button data-screen="leaderboard">LEADERBOARD</button></nav>
+<section id="drawer" class="drawer hidden"><div class="drawer-head"><h2 id="drawerTitle"></h2><button id="closeDrawer">×</button></div><div id="drawerContent"></div></section>
+<div id="toast" class="toast"></div>
+</div>
+<script src="/game.js"></script>
 </body>
 </html>
