@@ -486,10 +486,8 @@ wss.on("connection", (ws, req) => {
   });
 });
 
-setInterval(() => {
-  tickMarket();
-  broadcast({ type: "market", market: marketPayload(), leaderboard: leaderboard(), online: sockets.size });
-}, 2000);
+updateRealMarket();
+setInterval(updateRealMarket, 15000);
 
 setInterval(savePlayers, 15000);
 
