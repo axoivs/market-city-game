@@ -16,14 +16,14 @@ const PLAYERS_FILE = path.join(DATA_DIR, "players.json");
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const SYMBOLS = {
-  AAPL: { name: "Apple", price: 227.40, volatility: 0.010 },
-  MSFT: { name: "Microsoft", price: 509.20, volatility: 0.009 },
-  NVDA: { name: "NVIDIA", price: 178.35, volatility: 0.016 },
-  AMZN: { name: "Amazon", price: 231.80, volatility: 0.013 },
-  TSLA: { name: "Tesla", price: 438.25, volatility: 0.022 },
-  GOOGL: { name: "Alphabet", price: 251.10, volatility: 0.012 },
-  META: { name: "Meta", price: 754.80, volatility: 0.014 },
-  JPM: { name: "JPMorgan", price: 316.70, volatility: 0.009 }
+  AAPL: { name: "Apple" },
+  MSFT: { name: "Microsoft" },
+  NVDA: { name: "NVIDIA" },
+  AMZN: { name: "Amazon" },
+  TSLA: { name: "Tesla" },
+  GOOGL: { name: "Alphabet" },
+  META: { name: "Meta" },
+  JPM: { name: "JPMorgan" }
 };
 
 const market = {};
@@ -31,12 +31,12 @@ for (const [symbol, info] of Object.entries(SYMBOLS)) {
   market[symbol] = {
     symbol,
     name: info.name,
-    price: info.price,
-    open: info.price,
-    previousClose: info.price,
-    change: 0,
-    changePct: 0,
-    history: [info.price]
+    price: null,
+    open: null,
+    previousClose: null,
+    change: null,
+    changePct: null,
+    history: []
   };
 }
 
@@ -240,111 +240,8 @@ function optionGreeks(type, spot, strike, ivPercent, days) {
   };
 }
 
-function makeExpirations() {
-  const now = new Date();
-  const out = [];
-  const seen = new Set();
-
-  const add = (date, expirationType) => {
-    const timestamp = date.getTime();
-    if (timestamp <= Date.now() || seen.has(timestamp)) return;
-    seen.add(timestamp);
-    out.push({
-      timestamp,
-      days: Math.max(1, Math.ceil((timestamp - Date.now()) / 86400000)),
-      expirationType
-    });
-  };
-
-  // Weekly Monday/Wednesday/Friday expirations for the next 14 weeks.
-  for (let offset = 1; offset <= 98; offset++) {
-    const d = new Date(now);
-    d.setHours(16, 0, 0, 0);
-    d.setDate(now.getDate() + offset);
-    const day = d.getDay();
-    if (day === 1 || day === 3 || day === 5) add(d, "W");
-  }
-
-  // Standard monthly: third Friday for the next 24 months.
-  for (let monthOffset = 0; monthOffset < 24; monthOffset++) {
-    const d = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1, 16, 0, 0, 0);
-    const firstFridayOffset = (5 - d.getDay() + 7) % 7;
-    d.setDate(1 + firstFridayOffset + 14);
-    add(d, "M");
-  }
-
-  // Quarterly: last business day of each quarter for the next 8 quarters.
-  for (let q = 0; q < 8; q++) {
-    const month = Math.floor((now.getMonth() + q * 3) / 3) * 3 + 2;
-    const year = now.getFullYear() + Math.floor(month / 12);
-    const actualMonth = month % 12;
-    const d = new Date(year, actualMonth + 1, 0, 16, 0, 0, 0);
-    while (d.getDay() === 0 || d.getDay() === 6) d.setDate(d.getDate() - 1);
-    add(d, "Q");
-  }
-
-  // January LEAPS-style expirations for the next five years.
-  for (let yearOffset = 0; yearOffset <= 5; yearOffset++) {
-    const year = now.getFullYear() + yearOffset;
-    const d = new Date(year, 0, 1, 16, 0, 0, 0);
-    const firstFridayOffset = (5 - d.getDay() + 7) % 7;
-    d.setDate(1 + firstFridayOffset + 14);
-    add(d, "L");
-  }
-
-  return out.sort((a, b) => a.timestamp - b.timestamp);
-}
-
-function makeStrikeLadder(spot) {
-  // Keep strikes evenly spaced using standard $2.50 / $5 increments.
-  // No irregular strike values such as $3.40, $5.90, or $8.40.
-  const step = spot <= 250 ? 2.5 : 5;
-  const out = new Set();
-
-  const low = Math.max(step, Math.floor((spot * 0.20) / step) * step);
-  const high = Math.ceil((spot * 1.80) / step) * step;
-
-  for (let strike = low; strike <= high + step / 2; strike += step) {
-    out.add(Number(strike.toFixed(2)));
-  }
-
-  return [...out].sort((x, y) => x - y);
-}
-
-function makeOptionChain(symbol) {
-  const stock = market[symbol];
-  if (!stock || !Number.isFinite(stock.price) || stock.price <= 0) return [];
-
-  const strikes = makeStrikeLadder(stock.price);
-  const expirations = makeExpirations();
-  const contracts = [];
-
-  for (const exp of expirations) {
-    const expiration = exp.timestamp;
-    const days = exp.days;
-    for (const strike of strikes) {
-      for (const type of ["call", "put"]) {
-        const iv = 0.30;
-        const temp = { type, symbol, strike, expiration, iv };
-        const mid = optionValue(temp, stock.price);
-        const spread = Math.max(0.03, mid * 0.08);
-        const greeks = optionGreeks(type, stock.price, strike, iv, days);
-        contracts.push({
-          id: crypto.createHash("sha1").update(symbol + type + strike + expiration).digest("hex").slice(0, 12),
-          symbol, type, strike, expiration, days, expirationType: exp.expirationType,
-          iv: round(iv * 100, 1),
-          last: round(mid, 2),
-          volume: Math.max(0, Math.round(2500 * Math.exp(-Math.abs(strike - stock.price) / Math.max(1, stock.price * 0.08)) + Math.random() * 250)),
-          openInterest: Math.max(50, Math.round(12000 * Math.exp(-Math.abs(strike - stock.price) / Math.max(1, stock.price * 0.12)) + Math.random() * 1500)),
-          bid: round(Math.max(0.01, mid - spread / 2), 2),
-          ask: round(mid + spread / 2, 2),
-          mid: round(mid, 2),
-          ...Object.fromEntries(Object.entries(greeks).map(([k, v]) => [k, round(v, 4)]))
-        });
-      }
-    }
-  }
-  return contracts;
+async function getRealOptionChain(symbol) {
+  return realMarket.fetchOptionChain(symbol, round);
 }
 
 function portfolioValue(player) {
@@ -530,7 +427,7 @@ function playerIdFromRequest(value) {
   return /^[a-f0-9-]{20,64}$/i.test(id) ? id : crypto.randomUUID();
 }
 
-const server = http.createServer((req, res) => {
+const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, "http://" + req.headers.host);
   if (url.pathname === "/api/bootstrap") {
     const id = playerIdFromRequest(url.searchParams.get("playerId"));
@@ -592,13 +489,15 @@ const server = http.createServer((req, res) => {
 
   if (url.pathname === "/api/options") {
     const symbol = (url.searchParams.get("symbol") || "AAPL").toUpperCase();
-    const chain = makeOptionChain(symbol);
-    if (!chain) {
-      res.writeHead(404, { "Content-Type": "application/json" });
-      return res.end(JSON.stringify({ error: "Unknown symbol" }));
+    try {
+      const chain = await getRealOptionChain(symbol);
+      res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+      return res.end(JSON.stringify({ symbol, chain, source: "Alpaca/OPRA" }));
+    } catch (err) {
+      console.error("Real option chain failed:", err.message);
+      res.writeHead(503, { "Content-Type": "application/json", "Cache-Control": "no-store" });
+      return res.end(JSON.stringify({ error: err.message, source: "Alpaca/OPRA" }));
     }
-    res.writeHead(200, { "Content-Type": "application/json", "Cache-Control": "no-store" });
-    return res.end(JSON.stringify({ symbol, chain }));
   }
 
   let filePath = url.pathname === "/" ? path.join(PUBLIC, "index.html") : path.join(PUBLIC, url.pathname);
