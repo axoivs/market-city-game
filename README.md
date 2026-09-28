@@ -46,3 +46,6 @@ The MVP uses a server-side simulated market. A real market-data provider can be 
 ## Important
 
 This is a game/simulation. Trades use virtual money and do not place real securities or options orders.
+
+
+<!-- real market data integration in progress -->
