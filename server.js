@@ -225,25 +225,27 @@ function makeOptionChain(symbol) {
   const stock = market[symbol];
   if (!stock || !Number.isFinite(stock.price) || stock.price <= 0) return [];
   const strikes = [-0.10, -0.05, 0, 0.05, 0.10].map(mult => round(stock.price * (1 + mult), 0));
-  const expiration = Date.now() + 30 * 86400000;
-  const days = 30;
+  const expirationDays = [7, 14, 30, 60];
   const contracts = [];
-  for (const strike of strikes) {
-    for (const type of ["call", "put"]) {
-      const iv = 0.30;
-      const temp = { type, symbol, strike, expiration, iv };
-      const mid = optionValue(temp, stock.price);
-      const spread = Math.max(0.03, mid * 0.08);
-      const greeks = optionGreeks(type, stock.price, strike, iv, days);
-      contracts.push({
-        id: crypto.createHash("sha1").update(symbol + type + strike).digest("hex").slice(0, 12),
-        symbol, type, strike, expiration, days,
-        iv: round(iv * 100, 1),
-        bid: round(Math.max(0.01, mid - spread / 2), 2),
-        ask: round(mid + spread / 2, 2),
-        mid: round(mid, 2),
-        ...Object.fromEntries(Object.entries(greeks).map(([k, v]) => [k, round(v, 4)]))
-      });
+  for (const days of expirationDays) {
+    const expiration = Date.now() + days * 86400000;
+    for (const strike of strikes) {
+      for (const type of ["call", "put"]) {
+        const iv = 0.30;
+        const temp = { type, symbol, strike, expiration, iv };
+        const mid = optionValue(temp, stock.price);
+        const spread = Math.max(0.03, mid * 0.08);
+        const greeks = optionGreeks(type, stock.price, strike, iv, days);
+        contracts.push({
+          id: crypto.createHash("sha1").update(symbol + type + strike + days).digest("hex").slice(0, 12),
+          symbol, type, strike, expiration, days,
+          iv: round(iv * 100, 1),
+          bid: round(Math.max(0.01, mid - spread / 2), 2),
+          ask: round(mid + spread / 2, 2),
+          mid: round(mid, 2),
+          ...Object.fromEntries(Object.entries(greeks).map(([k, v]) => [k, round(v, 4)]))
+        });
+      }
     }
   }
   return contracts;
