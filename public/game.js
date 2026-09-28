@@ -257,48 +257,31 @@ function drawPlayer(p,me){
 }
 function setMoveTarget(clientX,clientY){
   const rect=canvas.getBoundingClientRect();
-  const canvasRatio=canvas.width/canvas.height;
-  const boxRatio=rect.width/rect.height;
-  let drawW=rect.width, drawH=rect.height, offsetX=0, offsetY=0;
+  if(!rect.width||!rect.height)return false;
 
-  // The canvas uses object-fit:contain, so account for any letterboxing.
-  if(boxRatio>canvasRatio){
-    drawW=rect.height*canvasRatio;
-    offsetX=(rect.width-drawW)/2;
-  }else{
-    drawH=rect.width/canvasRatio;
-    offsetY=(rect.height-drawH)/2;
-  }
+  // Canvas is displayed at exactly 100% of the game area.
+  const x=(clientX-rect.left)*(canvas.width/rect.width);
+  const y=(clientY-rect.top)*(canvas.height/rect.height);
 
-  const localX=(clientX-rect.left-offsetX)/drawW*canvas.width;
-  const localY=(clientY-rect.top-offsetY)/drawH*canvas.height;
-
-  if(localX<0||localY<0||localX>canvas.width||localY>canvas.height)return false;
+  if(x<0||y<0||x>canvas.width||y>canvas.height)return false;
 
   moveTarget={
-    x:Math.max(25,Math.min(1335,localX)),
-    y:Math.max(40,Math.min(755,localY))
+    x:Math.max(25,Math.min(1335,x)),
+    y:Math.max(40,Math.min(755,y))
   };
   return true;
 }
 
-function handleMapClick(e){
-  if(e.target!==canvas)return;
-  if(setMoveTarget(e.clientX,e.clientY)){
-    e.preventDefault();
-    canvas.classList.add("moving");
-    clearTimeout(canvas.moveClickTimer);
-    canvas.moveClickTimer=setTimeout(()=>canvas.classList.remove("moving"),180);
-  }
+function handleMapPointer(e){
+  if(e.button!==undefined && e.button!==0)return;
+  if(!setMoveTarget(e.clientX,e.clientY))return;
+  e.preventDefault();
+  e.stopPropagation();
 }
 
-// Use both click and pointerup so desktop mice, touch screens, and trackpads work.
-canvas.addEventListener("click",handleMapClick);
-canvas.addEventListener("pointerup",e=>{
-  if(e.pointerType==="touch"||e.pointerType==="pen")handleMapClick(e);
-});
-canvas.addEventListener("touchstart",e=>e.preventDefault(),{passive:false});
-
+canvas.addEventListener("pointerdown",handleMapPointer,{passive:false});
+canvas.addEventListener("click",handleMapPointer,{passive:false});
+canvas.addEventListener("touchstart",handleMapPointer,{passive:false});
 function loop(){
   if(state.player){
     let dx=0,dy=0;
