@@ -66,7 +66,22 @@ function populateSymbols(){
 function selectedStock(){ return state.market.find(s=>s.symbol===state.selected); }
 function formatExpiration(ts){return new Date(ts).toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"});}
 function daysToExpiration(ts){return Math.max(0,Math.ceil((ts-Date.now())/86400000));}
-function renderExpirationDates(){const ex=[...new Set(state.options.map(o=>o.expiration))].sort((a,b)=>a-b);expirationEl.innerHTML=ex.map((ts,i)=>`<button class="expiration-btn ${i===0?"active":""}" data-exp="${ts}"><b>${formatExpiration(ts)}</b><small>${daysToExpiration(ts)} days</small></button>`).join("");expirationEl.querySelectorAll(".expiration-btn").forEach(b=>b.onclick=()=>{expirationEl.querySelectorAll(".expiration-btn").forEach(x=>x.classList.remove("active"));b.classList.add("active");renderOptionChain(Number(b.dataset.exp));});}
+function renderExpirationDates(){
+  const ex=[...new Map(state.options.map(o=>[o.expiration,o])).values()].sort((a,b)=>a.expiration-b.expiration);
+  expirationEl.innerHTML=ex.map((o,i)=>{
+    const type=o.expirationType==="W"?"WEEKLY":o.expirationType==="Q"?"QUARTERLY":o.expirationType==="L"?"LEAPS":"MONTHLY";
+    return `<button class="expiration-btn ${i===0?"active":""}" data-exp="${o.expiration}">
+      <b>${formatExpiration(o.expiration)}</b><small>${type} · ${daysToExpiration(o.expiration)} days</small>
+    </button>`;
+  }).join("");
+  expirationEl.querySelectorAll(".expiration-btn").forEach(b=>b.onclick=()=>{
+    expirationEl.querySelectorAll(".expiration-btn").forEach(x=>x.classList.remove("active"));
+    b.classList.add("active");
+    renderOptionChain(Number(b.dataset.exp));
+  });
+}
+
+
 function renderOptionChain(expiration){
   const rows=state.options.filter(o=>!expiration||o.expiration===expiration).sort((a,b)=>a.strike-b.strike);
   if(!rows.length){chainEl.innerHTML='<div class="chain-loading">No option contracts available.</div>';return;}
@@ -120,7 +135,7 @@ async function loadOptions(){
   const r=await fetch("/api/options?symbol="+encodeURIComponent(state.selected)+"&_="+Date.now(),{cache:"no-store"});
   const data=await r.json(); state.options=data.chain||[];
   renderExpirationDates(); renderOptionChain();
-  $("contract").innerHTML=state.options.map((o,i)=>`<option value="${i}">${o.type.toUpperCase()} ${o.strike} · ${formatExpiration(o.expiration)} · ask ${money(o.ask)}</option>`).join("");
+  $("contract").innerHTML=state.options.map((o,i)=>`<option value="${i}">${o.type.toUpperCase()} ${o.strike} · ${formatExpiration(o.expiration)} · ${o.expirationType||"MONTHLY"} · ask ${money(o.ask)}</option>`).join("");
   renderOptionInfo();
 }
 
