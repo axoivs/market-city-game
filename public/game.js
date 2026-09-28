@@ -16,7 +16,62 @@ if (!playerId) {
   }
   localStorage.setItem("marketCityPlayerId", playerId);
 }
-const ws = new WebSocket((location.protocol === "https:" ? "wss://" : "ws://") + location.host + "?playerId=" + encodeURIComponent(playerId));
+let ws = null;
+let reconnectTimer = null;
+let reconnectDelay = 1000;
+
+function connectWebSocket() {
+  if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) return;
+
+  const url = (location.protocol === "https:" ? "wss://" : "ws://")
+    + location.host + "?playerId=" + encodeURIComponent(playerId);
+
+  ws = new WebSocket(url);
+
+  ws.addEventListener("open", () => {
+    reconnectDelay = 1000;
+    toast("Connected");
+    send({type:"hello"});
+  });
+
+  ws.addEventListener("message", handleSocketMessage);
+
+  ws.addEventListener("error", () => {
+    // close will schedule the reconnect; don't spam the UI with duplicate errors.
+  });
+
+  ws.addEventListener("close", () => {
+    toast("Server connection lost — reconnecting...");
+    scheduleReconnect();
+  });
+}
+
+function scheduleReconnect() {
+  if (reconnectTimer) return;
+  reconnectTimer = setTimeout(() => {
+    reconnectTimer = null;
+    connectWebSocket();
+    reconnectDelay = Math.min(reconnectDelay * 2, 15000);
+  }, reconnectDelay);
+}
+
+function handleSocketMessage(event) {
+  const msg = JSON.parse(event.data);
+  if(msg.type==="state"){
+    state.player=msg.player;state.market=msg.market;state.leaderboard=msg.leaderboard;state.online=msg.online;
+    renderAll();
+  } else if(msg.type==="market"){
+    state.market=msg.market;state.leaderboard=msg.leaderboard;state.online=msg.online;
+    renderWatchlist();renderHeader();selectSymbol(state.selected);
+  } else if(msg.type==="players"){
+    state.others=msg.players;
+  } else if(msg.type==="error"){
+    toast(msg.message);
+  }
+}
+
+connectWebSocket();
+
 const state = { player: null, market: [], others: [], leaderboard: [], online: 0, selected: "AAPL", options: [] };
 const keys = new Set();
 let moveTarget = null;
