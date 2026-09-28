@@ -457,8 +457,14 @@ async function getRadar() {
           const last = Number(t.p);
           const ask = Number(q.ap);
           const bid = Number(q.bp);
+          // Outside regular trading hours an IEX latest quote/trade can be
+          // empty. The Alpaca snapshot still contains the real daily close,
+          // so use that close rather than showing an empty radar.
+          const dailyClose = Number(daily.c);
           const price = finite(last) && last > 0 ? last :
-            (finite(ask) && ask > 0 ? ask : (finite(bid) && bid > 0 ? bid : null));
+            (finite(ask) && ask > 0 ? ask :
+            (finite(bid) && bid > 0 ? bid :
+            (finite(dailyClose) && dailyClose > 0 ? dailyClose : null)));
           if (!finite(price) || price <= 0) continue;
 
           const asset = assetMap.get(symbol);
