@@ -73,14 +73,31 @@ async function loadOptions(){
 function renderOptionInfo(){
   const o=state.options[Number($("contract").value)||0];
   if(!o){$("greeks").textContent="No option chain";return}
-  $("greeks").innerHTML=`IV ${o.iv}% · Δ ${o.delta} · Γ ${o.gamma}<br>Θ ${o.theta} · Vega ${o.vega}<br>30-day simulated contract · 100 shares/contract`;
+  $("greeks").innerHTML=`IV ${o.iv}% · Δ ${o.delta} · Γ ${o.gamma}<br>Θ ${o.theta} · Vega ${o.vega}<br>30-day virtual contract · 100 shares/contract`;
 }
 function selectSymbol(sym){
   state.selected=sym;
   $("symbol").value=sym;
   const s=selectedStock();
+  if(!s){
+    $("quote").innerHTML="<div class=\"quote-price\">Waiting for market data…</div>";
+    return;
+  }
   const cls=s.change>0?"up":s.change<0?"down":"flat";
-  $("quote").innerHTML=`<div class="quote-price">${money(s.price)}</div><div class="quote-change ${cls}">${s.change>=0?"+":""}${money(s.change)} (${s.changePct>=0?"+":""}${s.changePct}%)</div>`;
+  const history=Array.isArray(s.history)?s.history.filter(Number.isFinite):[];
+  let chart="";
+  if(history.length>1){
+    const min=Math.min(...history), max=Math.max(...history), span=Math.max(0.0001,max-min);
+    const points=history.map((v,i)=>{
+      const x=(i/(history.length-1))*180;
+      const y=42-((v-min)/span)*36;
+      return x.toFixed(1)+","+y.toFixed(1);
+    }).join(" ");
+    chart=`<svg class="sparkline" viewBox="0 0 180 48" preserveAspectRatio="none" aria-label="Recent real price movement"><polyline points="${points}" fill="none" stroke="currentColor" stroke-width="2"/></svg>`;
+  }
+  const updated=s.lastTradeAt?new Date(s.lastTradeAt).toLocaleTimeString():"waiting";
+  const changeText=s.change==null?"—":`${s.change>=0?"+":""}${money(s.change)} (${s.changePct>=0?"+":""}${s.changePct}%)`;
+  $("quote").innerHTML=`<div class="quote-price">${s.price==null?"Waiting…":money(s.price)}</div><div class="quote-change ${cls}">${changeText}</div>${chart}<div class="quote-meta">REAL MARKET DATA · updated ${updated}</div>`;
   loadOptions();
 }
 
@@ -180,7 +197,7 @@ document.querySelectorAll(".menu-btn").forEach(btn=>btn.onclick=()=>{
     const opts=(state.player?.options||[]).map(o=>`<tr><td>${o.symbol}</td><td>${o.type.toUpperCase()}</td><td>${o.strike}</td><td>${o.quantity}</td><td>${money(o.marketPrice*100*o.quantity)}</td></tr>`).join("");
     openDrawer("Portfolio",`<table class="table"><thead><tr><th>STOCK</th><th>SHARES</th><th>PRICE</th><th>VALUE</th></tr></thead><tbody>${pos||"<tr><td colspan=4>No stock positions yet.</td></tr>"}</tbody></table><h3 style="padding:12px">Options</h3><table class="table"><thead><tr><th>SYMBOL</th><th>TYPE</th><th>STRIKE</th><th>QTY</th><th>VALUE</th></tr></thead><tbody>${opts||"<tr><td colspan=5>No option positions yet.</td></tr>"}</tbody></table>`);
   } else if(s==="news"){
-    openDrawer("News Center",`<div class="news-item"><b>Market City Wire</b><span>Markets are simulated in the MVP. Future releases can connect this feed to a licensed real-time market-data provider.</span></div><div class="news-item"><b>Trading Desk</b><span>Watch price movement, compare companies, and practice position sizing without risking real money.</span></div><div class="news-item"><b>Options Brief</b><span>Calls benefit from rising underlying prices; puts benefit from falling prices. Premiums are simulated from volatility and time to expiration.</span></div>`);
+    openDrawer("News Center",`<div class="news-item"><b>Market City Wire</b><span>Stock quotes and recent price movement are pulled from live market data. Quotes may be delayed depending on the upstream data feed.</span></div><div class="news-item"><b>Trading Desk</b><span>Watch price movement, compare companies, and practice position sizing without risking real money.</span></div><div class="news-item"><b>Options Brief</b><span>Calls benefit from rising underlying prices; puts benefit from falling prices. Premiums are simulated from volatility and time to expiration.</span></div>`);
   } else if(s==="missions"){
     const m=state.player?.missions||{};
     openDrawer("Missions",`<div class="mission"><span>Complete your first trade</span><b class="${m.firstTrade?"done":""}">${m.firstTrade?"DONE":"+100 XP"}</b></div><div class="mission"><span>Tour Market City</span><b class="${m.cityTour?"done":""}">${m.cityTour?"DONE":"+100 XP"}</b></div><div class="mission"><span>Grow portfolio to $110,000</span><b class="${m.profitGoal?"done":""}">${m.profitGoal?"DONE":"+500 XP"}</b></div>`);
