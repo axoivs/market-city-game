@@ -440,15 +440,15 @@ const UNUSUAL_VOLUME_CONCURRENCY = 6;
 
 function clamp(n,min,max){return Math.max(min,Math.min(max,n));}
 
-async function getRadar() {
-  if (radarCache.data && Date.now() - radarCache.at < 60000) return radarCache.data;
+async function getRadar(options = {}) {
+  if (!options.refresh && radarCache.data && Date.now() - radarCache.at < 60000) return radarCache.data;
 
-  // Full active/tradable Alpaca US-equity universe. The radar is not limited
-  // to the eight stocks shown in the main Market Watch.
+  // Each fresh Radar scan selects a new 100-stock cross-industry sample.
   const allAssets = await getAssets();
-  // Scan the entire real Alpaca universe, but traverse it in a randomized
-  // cross-industry order so the scan is not alphabetically sequenced.
-  const assets = randomIndustrySample(allAssets, allAssets.length);
+  const assets = randomIndustrySample(
+    allAssets.filter(x => x.assetClass === "us_equity" || !x.assetClass),
+    100
+  );
   const assetMap = new Map(assets.map(a => [a.symbol, a]));
   const symbols = assets
     .map(a => a.symbol)
@@ -821,18 +821,16 @@ async function getRadar() {
 const outlookCache = { data: null, at: 0 };
 const volumeCache = { data: null, at: 0 };
 
-async function getOutlook(days = 30) {
+async function getOutlook(days = 30, options = {}) {
   const horizon = [30,60,90,180,365].includes(Number(days)) ? Number(days) : 30;
   if (!getOutlook.cache) getOutlook.cache = new Map();
   const cached = getOutlook.cache.get(horizon);
-  if (cached && Date.now() - cached.at < 120000) return cached.data;
+  if (!options.refresh && cached && Date.now() - cached.at < 120000) return cached.data;
 
-  const radar = await getRadar();
+  const radar = await getRadar({refresh:true});
   const allCandidates = (radar.stocks || [])
     .filter(x => x.hasOptions && finite(x.price) && x.price > 0 && finite(x.changePct));
-  // Traverse candidates in a fresh randomized cross-industry order. The
-  // resulting setups are still ranked by their real analytics below.
-  const candidates = randomIndustrySample(allCandidates, allCandidates.length);
+  const candidates = randomIndustrySample(allCandidates, Math.min(100, allCandidates.length));
 
   // Alpaca's multi-symbol bars endpoint requires an explicit historical
   // window. Without start=, a request can default to the current day.
@@ -971,8 +969,8 @@ async function getOutlook(days = 30) {
   return result;
 }
 
-async function getUnusualOptionVolume() {
-  if(volumeCache.data&&Date.now()-volumeCache.at<120000)return volumeCache.data;
+async function getUnusualOptionVolume(options = {}) {
+  if(!options.refresh && volumeCache.data&&Date.now()-volumeCache.at<120000)return volumeCache.data;
 
   // Scan a real Alpaca universe of stocks with options. Do not depend only
   // on the Radar's current top movers, because that can hide high-volume
