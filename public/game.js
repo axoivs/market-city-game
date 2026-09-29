@@ -117,12 +117,62 @@ function renderTicket(){const s=stock();$("ticketPrice").textContent=px(s?.price
 async function selectSymbol(s,openOptions=false){state.selected=s.toUpperCase();state.selectedContract=null;if(!watchHas(state.selected)){watchlist().push(state.selected);saveWatchlistLocal();saveWatchlistRemote()}state.expiration="";let existing=state.market.find(x=>x.symbol===state.selected);if(!existing||!Number.isFinite(Number(existing.price))||!Array.isArray(existing.history)||existing.history.length<2){try{const m=await api("/api/stock?symbol="+encodeURIComponent(state.selected));const i=state.market.findIndex(x=>x.symbol===state.selected);if(i<0)state.market.push(m.stock);else state.market[i]=m.stock}catch(e){toast(e.message);return}}populate();renderWatchlist();renderQuote();renderChart();renderTicket();await loadExpirations();if(openOptions){document.querySelectorAll(".ticket-tabs button").forEach(x=>x.classList.toggle("active",x.dataset.tab==="option"));$("stockTicket").hidden=true;$("optionTicket").hidden=false;renderOptionTicket();if(window.matchMedia("(max-width:800px)").matches)document.querySelector(".options")?.scrollIntoView({behavior:"smooth",block:"start"})}}
 async function loadExpirations(){if(!state.selected){state.expirations=[];state.expiration="";state.options=[];state.selectedContract=null;const e=$("expirationDates");if(e)e.innerHTML="";$("chainStatus").textContent="Select a stock to load the real Alpaca option chain.";renderChain();renderOptionTicket();return}try{const m=await api("/api/options/expirations?symbol="+encodeURIComponent(state.selected));state.expirations=m.expirations||[];const e=$("expirationDates");e.innerHTML=state.expirations.map(x=>'<option value="'+esc(x)+'">'+dateLabel(x)+'</option>').join("");if(!state.expirations.length){state.options=[];renderChain();return}const today=new Date().toISOString().slice(0,10);const preferred=state.expirations.find(x=>x>today)||state.expirations[0];state.expiration=state.expirations.includes(state.expiration)&&state.expiration>today?state.expiration:preferred;e.value=state.expiration;await loadChain()}catch(e){$("chainStatus").textContent="Alpaca expirations unavailable: "+e.message}}
 async function loadChain(){const seq=++chainSeq;$("chainStatus").textContent="Loading real Alpaca quotes, trades and Greeks…";try{const m=await api("/api/options?symbol="+encodeURIComponent(state.selected)+"&expirationDate="+encodeURIComponent(state.expiration));if(seq!==chainSeq)return;state.options=m.chain||[];$("chainStatus").textContent=state.options.length+" real contracts · "+(m.source||"Alpaca")+" · live updates enabled";renderChain();renderOptionTicket()}catch(e){state.options=[];renderChain();$("chainStatus").textContent="Alpaca option chain unavailable: "+e.message}}
-function renderChain(){if(!state.selected||!state.options.length){$("optionChain").innerHTML="";return}const calls=new Map(state.options.filter(x=>x.type==="call").map(x=>[x.strike,x])),puts=new Map(state.options.filter(x=>x.type==="put").map(x=>[x.strike,x])),strikes=[...new Set(state.options.map(x=>x.strike))].sort((a,b)=>a-b),spot=stock()?.price;let atm=strikes[0];if(Number.isFinite(spot))for(const s of strikes)if(Math.abs(s-spot)<Math.abs(atm-spot))atm=s;if(!strikes.length){$("optionChain").innerHTML='<div style="padding:28px;color:#687c91">No real contracts returned by Alpaca.</div>';return}
+function optionRecommendationScore(o,side,ctx){
+  const ask=Number(o.ask),bid=Number(o.bid),last=Number(o.last);
+  const price=Number.isFinite(ask)&&ask>0?ask:(Number.isFinite(last)&&last>0?last:null);
+  if(!Number.isFinite(price)||price<=0)return null;
+  const mid=Number.isFinite(bid)&&bid>0&&Number.isFinite(ask)&&ask>0?(bid+ask)/2:price;
+  const spread=Number.isFinite(bid)&&bid>0&&Number.isFinite(ask)&&ask>0?Math.max(0,(ask-bid)/Math.max(mid,0.01)):0.20;
+  const absDelta=Math.abs(Number(o.delta)||0);
+  const deltaFit=Math.max(0,1-Math.abs(absDelta-0.50)/0.50);
+  const spreadScore=Math.max(0,1-Math.min(spread,0.20)/0.20);
+  const liqRaw=Math.log1p(Math.max(0,Number(o.volume)||0)+Math.max(0,Number(o.openInterest)||0));
+  const liqScore=Math.min(1,liqRaw/Math.log1p(5000));
+  const dte=Math.max(0,Math.round((new Date(String(o.expirationDate||"")+ "T23:59:59Z")-new Date())/86400000));
+  const dteScore=Math.max(0,1-Math.abs(dte-30)/45);
+  const theta=Math.abs(Number(o.theta)||0);
+  const thetaScore=Math.max(0,1-Math.min(theta/2,1));
+  const chainIV=Number(ctx.medianIV);
+  const iv=Number(o.iv);
+  const ivScore=Number.isFinite(iv)&&Number.isFinite(chainIV)&&chainIV>0?Math.max(0,1-Math.max(0,iv/chainIV-1)/1.5):0.5;
+  const prices=ctx.prices;
+  const p25=prices[Math.floor(Math.max(0,prices.length-1)*0.25)]||price;
+  const p75=prices[Math.floor(Math.max(0,prices.length-1)*0.75)]||price;
+  const affordability=p75>p25?Math.max(0,Math.min(1,(p75-price)/(p75-p25))):0.5;
+  const score=100*(0.25*deltaFit+0.20*spreadScore+0.20*liqScore+0.15*dteScore+0.10*thetaScore+0.05*ivScore+0.05*affordability);
+  const strike=Number(o.strike)||0;
+  const breakeven=side==="call"?strike+price:strike-price;
+  return {o,side,score,dte,price,spread,breakeven,maxLoss:price*(Number(o.size)||100),deltaFit,liqScore};
+}
+function renderOptionRecommendations(){
+  const box=$("optionRecommendations");
+  if(!box)return;
+  if(!state.selected||!state.options.length){box.innerHTML="";return}
+  const valid=state.options.filter(o=>Number(o.ask)>0||Number(o.last)>0);
+  if(!valid.length){box.innerHTML='<div class="recommend-empty">No priced contracts available for scoring.</div>';return}
+  const ivs=valid.map(o=>Number(o.iv)).filter(Number.isFinite).sort((a,b)=>a-b);
+  const prices=valid.map(o=>Number(o.ask)>0?Number(o.ask):Number(o.last)).filter(x=>x>0).sort((a,b)=>a-b);
+  const medianIV=ivs.length?ivs[Math.floor(ivs.length/2)]:null;
+  const ctx={medianIV,prices};
+  const ranked=valid.flatMap(o=>{const a=optionRecommendationScore(o,o.type,ctx);return a?[a]:[]}).sort((a,b)=>b.score-a.score);
+  const calls=ranked.filter(x=>x.side==="call").slice(0,3);
+  const puts=ranked.filter(x=>x.side==="put").slice(0,3);
+  const card=x=>{
+    const o=x.o;
+    const selected=state.selectedContract?.contractSymbol===o.contractSymbol?" selected-recommendation":"";
+    return '<button type="button" class="option-rec'+selected+'" data-recommend-contract="'+esc(o.contractSymbol)+'"><span class="rec-main"><b>'+esc(o.type.toUpperCase())+' '+px(o.strike)+'</b><small>'+esc(o.contractSymbol)+' · '+x.dte+'d</small></span><span class="rec-metrics"><b>Score '+x.score.toFixed(0)+'</b><small>Ask '+px(x.price)+' · BE '+px(x.breakeven)+' · Δ '+num(o.delta)+'</small></span></button>';
+  };
+  const callHTML=calls.map(card).join("")||'<div class="recommend-empty">No call meets the scoring requirements.</div>';
+  const putHTML=puts.map(card).join("")||'<div class="recommend-empty">No put meets the scoring requirements.</div>';
+  box.innerHTML='<div class="recommend-head"><div><b>OPTION FORMULA</b><span>Objective chain score — not a guaranteed-return prediction.</span></div><span class="recommend-rule">Delta 25% · Spread 20% · Liquidity 20% · DTE 15% · Theta 10% · IV 5% · Cost 5%</span></div><div class="recommend-grid"><div><h3>TOP CALLS</h3>'+callHTML+'</div><div><h3>TOP PUTS</h3>'+putHTML+'</div></div><div class="recommend-foot">Max loss shown is premium × contract size. Breakeven uses the current ask/last used by the score. Tap a result to load that exact contract into BUY OPTION.</div>';
+  box.querySelectorAll("[data-recommend-contract]").forEach(b=>b.onclick=()=>selectContract(b.dataset.recommendContract));
+}
+function renderChain(){if(!state.selected||!state.options.length){$("optionChain").innerHTML="";renderOptionRecommendations();return}const calls=new Map(state.options.filter(x=>x.type==="call").map(x=>[x.strike,x])),puts=new Map(state.options.filter(x=>x.type==="put").map(x=>[x.strike,x])),strikes=[...new Set(state.options.map(x=>x.strike))].sort((a,b)=>a-b),spot=stock()?.price;let atm=strikes[0];if(Number.isFinite(spot))for(const s of strikes)if(Math.abs(s-spot)<Math.abs(atm-spot))atm=s;if(!strikes.length){$("optionChain").innerHTML='<div style="padding:28px;color:#687c91">No real contracts returned by Alpaca.</div>';return}
  const dash='<td>—</td>'.repeat(10);
  const cell=(o,side)=>{if(!o)return dash;const z=state.selectedContract?.contractSymbol===o.contractSymbol?" selected-option":"";const cls="click "+side+z,attr=' data-contract="'+esc(o.contractSymbol)+'"';return '<td class="'+cls+'"'+attr+'>'+px(o.last)+'</td><td class="'+cls+'"'+attr+'>'+px(o.bid)+'</td><td class="'+cls+'"'+attr+'>'+px(o.ask)+'</td><td class="'+cls+'"'+attr+'>'+num(o.delta)+'</td><td class="'+cls+'"'+attr+'>'+num(o.gamma)+'</td><td class="'+cls+'"'+attr+'>'+num(o.theta)+'</td><td class="'+cls+'"'+attr+'>'+num(o.vega)+'</td><td class="'+cls+'"'+attr+'">'+(o.iv==null?"—":Number(o.iv).toFixed(2)+"%")+'</td><td class="'+cls+'"'+attr+'">'+(o.volume==null?"—":Number(o.volume).toLocaleString())+'</td><td class="'+cls+'"'+attr+'">'+(o.openInterest==null?"—":Number(o.openInterest).toLocaleString())+'</td>'};
  const labels=["LAST","BID","ASK","DELTA","GAMMA","THETA","VEGA","IV","VOL","OI"];
  const heads=labels.map(x=>'<th>'+x+'</th>').join("");
- $("optionChain").innerHTML='<table class="chain-table"><thead><tr><th colspan="10" class="call">CALLS</th><th rowspan="2">STRIKE</th><th colspan="10" class="put">PUTS</th></tr><tr>'+heads+'<th class="strike-head"></th>'+heads+'</tr></thead><tbody>'+strikes.map(s=>'<tr class="'+(s===atm?"atm":"")+'">'+cell(calls.get(s),"call")+'<td class="strike">'+px(s)+'</td>'+cell(puts.get(s),"put")+'</tr>').join("")+'</tbody></table>';document.querySelectorAll("[data-contract]").forEach(e=>e.onclick=()=>selectContract(e.dataset.contract))}
+ $("optionChain").innerHTML='<table class="chain-table"><thead><tr><th colspan="10" class="call">CALLS</th><th rowspan="2">STRIKE</th><th colspan="10" class="put">PUTS</th></tr><tr>'+heads+'<th class="strike-head"></th>'+heads+'</tr></thead><tbody>'+strikes.map(s=>'<tr class="'+(s===atm?"atm":"")+'">'+cell(calls.get(s),"call")+'<td class="strike">'+px(s)+'</td>'+cell(puts.get(s),"put")+'</tr>').join("")+'</tbody></table>';document.querySelectorAll("[data-contract]").forEach(e=>e.onclick=()=>selectContract(e.dataset.contract));renderOptionRecommendations()}
 function selectContract(s){
   state.selectedContract=state.options.find(x=>x.contractSymbol===s)||null;
   if(state.selectedContract&&!optionWatchHas(state.selectedContract.contractSymbol)){
