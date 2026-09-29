@@ -71,10 +71,30 @@ function renderWatchlist(){
     toast(s+" added to Market Watch and opened Options");
   };
 });
-  document.querySelectorAll(".option-watch-main").forEach(b=>b.onclick=()=>{
+  document.querySelectorAll(".option-watch-main").forEach(b=>b.onclick=async()=>{
     const o=optionWatchlist().find(x=>x.contractSymbol===b.dataset.option);
     if(!o)return;
-    selectSymbol(o.symbol).then(()=>{state.selectedContract=state.options.find(x=>x.contractSymbol===o.contractSymbol)||null;document.querySelectorAll(".ticket-tabs button").forEach(x=>x.classList.toggle("active",x.dataset.tab==="option"));$("stockTicket").hidden=true;$("optionTicket").hidden=false;renderChain();renderOptionTicket()});
+    try{
+      // Load the underlying stock and the exact expiration before selecting
+      // the saved Market Watch contract.
+      await selectSymbol(o.symbol);
+      state.expiration=o.expirationDate||state.expiration;
+      const e=$("expirationDates");
+      if(e&&state.expiration)e.value=state.expiration;
+      if(state.expiration)await loadChain();
+      // Select the exact contract in the freshly loaded Alpaca chain.
+      state.selectedContract=state.options.find(x=>x.contractSymbol===o.contractSymbol)||null;
+      if(!state.selectedContract){
+        toast(o.contractSymbol+" is not available in the current Alpaca chain.");
+        return;
+      }
+      document.querySelectorAll(".ticket-tabs button").forEach(x=>x.classList.toggle("active",x.dataset.tab==="option"));
+      $("stockTicket").hidden=true;
+      $("optionTicket").hidden=false;
+      renderChain();
+      renderOptionTicket();
+      toast(o.contractSymbol+" selected. Review the live quote and BUY OPTION.");
+    }catch(e){toast(e.message)}
   });
   document.querySelectorAll(".watch-remove[data-remove]").forEach(b=>b.onclick=e=>{
     e.stopPropagation();
