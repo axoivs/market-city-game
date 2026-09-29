@@ -1141,8 +1141,8 @@ async function getPredictions(options = {}) {
     return {...stock,price:latest,return30};
   }).filter(x=>finite(x.return30));
 
-  const beaten=shuffleArray(scored.filter(x=>x.return30<0).sort((a,b)=>a.return30-b.return30)).slice(0,8);
-  const extended=shuffleArray(scored.filter(x=>x.return30>0).sort((a,b)=>b.return30-a.return30)).slice(0,8);
+  const beaten=scored.filter(x=>x.return30<0).sort((a,b)=>a.return30-b.return30).slice(0,8);
+  const extended=scored.filter(x=>x.return30>0).sort((a,b)=>b.return30-a.return30).slice(0,8);
 
   async function choose(stock,type){
     try {
