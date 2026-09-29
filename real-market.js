@@ -816,7 +816,11 @@ async function getOutlook(days = 30) {
   }
 
   const rows = [];
-  for (const stock of candidates) {
+  let optionCursor = 0;
+  async function optionWorker() {
+    while (true) {
+      const stock = candidates[optionCursor++];
+      if (!stock) return;
     const history = (bars.get(stock.symbol) || [])
       .filter(x => finite(x.c) && Number(x.c) > 0)
       .sort((a,b) => String(a.t||"").localeCompare(String(b.t||"")));
@@ -883,7 +887,7 @@ async function getOutlook(days = 30) {
     ),1);
 
       rows.push({
-      symbol:stock.symbol,name:stock.name,price:latest,
+        symbol:stock.symbol,name:stock.name,price:latest,
       returnPeriod:finite(returnHorizon)?round(returnHorizon,2):null,
       return30:finite(return30)?round(return30,2):null,
       direction:direction.toUpperCase(),trend:stock.trend,
@@ -898,7 +902,7 @@ async function getOutlook(days = 30) {
     }
   }
 
-  await Promise.all(Array.from({length:Math.min(3,candidates.length)},optionWorker));
+  await Promise.all(Array.from({length:Math.min(3,candidates.length)}, optionWorker));
 
   rows.sort((a,b)=>b.setupScore-a.setupScore);
   const result = {
