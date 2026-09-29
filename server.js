@@ -167,13 +167,13 @@ const server=http.createServer(async(req,res)=>{
       const result=await real.getOptionChain(symbol,expirationDate);
       return respond(res,200,{symbol,...result,source:"Alpaca/"+(process.env.ALPACA_OPTION_FEED||"indicative")});
     }
-    if(u.pathname==="/api/radar") { if(u.searchParams.get("refresh")==="1" && real.clearRadarCache) real.clearRadarCache(); const radar=await real.getRadar(); return respond(res,200,{...radar,source:"Alpaca"}); }
+    if(u.pathname==="/api/radar") { if(u.searchParams.get("refresh")==="1" && real.clearRadarCache) real.clearRadarCache(); const radar=await real.getRadar({refresh:u.searchParams.get("refresh")==="1"}); return respond(res,200,{...radar,source:"Alpaca"}); }
     if(u.pathname==="/api/outlook") {
       const requested=Number(u.searchParams.get("days")||30);
       if(u.searchParams.get("refresh")==="1" && real.clearOutlookCache) real.clearOutlookCache(requested);
-      return respond(res,200,await real.getOutlook(requested));
+      return respond(res,200,await real.getOutlook(requested,{refresh:u.searchParams.get("refresh")==="1"}));
     }
-    if(u.pathname==="/api/unusual-volume") { if(u.searchParams.get("refresh")==="1" && real.clearUnusualVolumeCache) real.clearUnusualVolumeCache(); return respond(res,200,await real.getUnusualOptionVolume()); }
+    if(u.pathname==="/api/unusual-volume") { if(u.searchParams.get("refresh")==="1" && real.clearUnusualVolumeCache) real.clearUnusualVolumeCache(); return respond(res,200,await real.getUnusualOptionVolume({refresh:u.searchParams.get("refresh")==="1"})); }
     if(u.pathname==="/api/news"){
       const symbol=(u.searchParams.get("symbol")||"").toUpperCase();
       const news=await real.getNews(symbol?[symbol]:[]);return respond(res,200,{news,source:"Alpaca"});
