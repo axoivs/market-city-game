@@ -385,6 +385,8 @@ const RADAR_BATCH_SIZE = 100;
 const RADAR_OPTION_TARGETS = 12;
 const RADAR_OPTION_CONCURRENCY = 3;
 const RADAR_CONCURRENCY = 2;
+const OPTION_UNIVERSE_BATCH = 100;
+const UNUSUAL_VOLUME_CONCURRENCY = 6;
 
 function clamp(n,min,max){return Math.max(min,Math.min(max,n));}
 
@@ -917,8 +919,7 @@ async function getUnusualOptionVolume() {
   const assets = await getAssets();
   const symbols = assets
     .filter(x => x.hasOptions)
-    .map(x => x.symbol)
-    .slice(0, 100);
+    .map(x => x.symbol);
 
   const rows=[];
   let cursor=0;
@@ -954,7 +955,7 @@ async function getUnusualOptionVolume() {
       }catch(e){console.error("Unusual option volume",symbol,e.message);}
     }
   }
-  await Promise.all(Array.from({length:4},worker));
+  await Promise.all(Array.from({length:Math.min(UNUSUAL_VOLUME_CONCURRENCY,symbols.length)},worker));
 
   const calls=rows.filter(x=>x.type==="call")
     .sort((a,b)=>b.unusualScore-a.unusualScore||b.volume-a.volume).slice(0,20);
