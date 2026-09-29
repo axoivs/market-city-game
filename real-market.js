@@ -381,6 +381,56 @@ async function getNews(symbols = []) {
 
 const radarCache = { data: null, at: 0 };
 
+// Random cross-industry sampling. Alpaca's asset master does not provide
+// a dedicated industry field, so buckets are derived from the real company
+// name/ticker and randomized before sampling. This changes scan order only;
+// all prices/options/volume remain real Alpaca observations.
+const INDUSTRY_RULES = [
+  ["Technology", /software|semiconductor|chip|computer|cloud|cyber|data|tech|digital|internet|micro|systems|network/i],
+  ["Financial", /bank|banc|capital|financial|finance|insurance|reit|mortgage|credit|asset management|investment/i],
+  ["Healthcare", /health|medical|pharma|therapeut|biotech|hospital|diagnostic|clinical|drug/i],
+  ["Energy", /energy|oil|gas|petroleum|solar|renewable|power|utility|uranium/i],
+  ["Consumer", /retail|restaurant|food|beverage|apparel|fashion|consumer|grocery|home|beauty|travel|hotel/i],
+  ["Industrial", /industrial|manufactur|machin|aerospace|defense|airline|transport|logistics|construction|engineering/i],
+  ["Communication", /media|broadcast|telecom|wireless|communications|entertainment|streaming/i],
+  ["Materials", /chemical|steel|metal|mining|gold|silver|copper|material|lumber|paper|packaging/i]
+];
+
+function shuffleArray(arr){
+  const out=[...arr];
+  for(let i=out.length-1;i>0;i--){
+    const j=Math.floor(Math.random()*(i+1));
+    [out[i],out[j]]=[out[j],out[i]];
+  }
+  return out;
+}
+
+function randomIndustrySample(assets,count){
+  const buckets=new Map(INDUSTRY_RULES.map(([name])=>[name,[]]));
+  buckets.set("Other",[]);
+  for(const asset of assets){
+    const text=(asset.name||"")+" "+(asset.symbol||"");
+    const match=INDUSTRY_RULES.find(([,re])=>re.test(text));
+    buckets.get(match?match[0]:"Other").push(asset);
+  }
+  const order=shuffleArray([...buckets.keys()]);
+  const pools=new Map(order.map(k=>[k,shuffleArray(buckets.get(k))]));
+  const result=[];
+  while(result.length<Math.min(count,assets.length)){
+    let added=false;
+    for(const industry of order){
+      const pool=pools.get(industry);
+      if(pool.length){
+        result.push(pool.pop());
+        added=true;
+        if(result.length>=count) break;
+      }
+    }
+    if(!added) break;
+  }
+  return result;
+}
+
 const RADAR_BATCH_SIZE = 100;
 const RADAR_OPTION_TARGETS = 12;
 const RADAR_OPTION_CONCURRENCY = 3;
