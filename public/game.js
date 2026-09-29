@@ -176,13 +176,13 @@ async function drawer(screen){
       document.querySelectorAll("#volumeBody .radar-row").forEach(e=>e.onclick=()=>{selectSymbol(e.dataset.symbol);d.classList.add("hidden")});
     }catch(e){$("volumeBody").innerHTML='<div class="empty">'+esc(e.message)+'</div>'}
   }else if(screen==="predictions"){
-    b.innerHTML='<div class="drawer-body"><div class="radar-note">PREDICTIONS. Fresh 100-stock cross-industry scan using real Alpaca 30-day price history and current option-chain data. These are analytical setups, not guaranteed outcomes.</div><div id="predictionBody">Loading reversal setups…</div></div>';
+    b.innerHTML='<div class="drawer-body"><div class="radar-note">PREDICTIONS. Fresh 100-stock cross-industry scan using real Alpaca 90-day price history and current option-chain data. These are analytical setups, not guaranteed outcomes.</div><div id="predictionBody">Loading reversal setups…</div></div>';
     try{
       const r=await api("/api/predictions");
       const card=(title,x,kind)=>{
         if(!x)return '<div class="radar-section"><h3>'+title+'</h3><div class="empty">No qualifying real Alpaca setup found in this scan.</div></div>';
         const cls=x.return30<0?"down":"up";
-        return '<div class="radar-section"><h3>'+title+'</h3><button class="radar-row" data-symbol="'+esc(x.symbol)+'"><span><b>'+esc(x.symbol)+'</b><small>'+esc(x.name||"")+' · 30D '+(x.return30>=0?"+":"")+Number(x.return30).toFixed(2)+'%</small></span><span class="radar-right"><b class="'+cls+'">'+esc(x.contractSymbol)+'</b><small>'+esc(kind)+" · strike "+px(x.strike)+" · "+esc(x.expirationDate||"")+'</small></span></button><p class="radar-help">'+esc(x.thesis||"")+'</p></div>';
+        return '<div class="radar-section"><h3>'+title+'</h3><button class="radar-row" data-symbol="'+esc(x.symbol)+'"><span><b>'+esc(x.symbol)+'</b><small>'+esc(x.name||"")+' · 90D '+(x.return90>=0?"+":"")+Number(x.return90).toFixed(2)+'%</small></span><span class="radar-right"><b class="'+cls+'">'+esc(x.contractSymbol)+'</b><small>'+esc(kind)+" · strike "+px(x.strike)+" · "+esc(x.expirationDate||"")+'</small></span></button><p class="radar-help">'+esc(x.thesis||"")+'</p></div>';
       };
       $("predictionBody").innerHTML='<div class="radar-toolbar"><button id="refreshPredictions" class="ghost">↻ REFRESH PREDICTIONS</button></div>'+card("REBOUND CALL — AFTER LARGE DECLINE",r.rebound,"CALL")+card("PULLBACK PUT — AFTER LARGE ADVANCE",r.downside,"PUT")+'<div class="radar-foot">Updated '+new Date(r.updatedAt).toLocaleTimeString()+' · '+esc(r.source||"Alpaca")+'</div>';
       $("refreshPredictions").onclick=()=>drawer("predictions");
