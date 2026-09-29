@@ -33,3 +33,6 @@
 .chain-table td.selected-option{background:#163149!important;outline:none!important;box-shadow:none!important;position:relative;z-index:1}
 .chain-table tr.atm td.selected-option{background:#163149!important}
 .option-watch-row.active{background:#163149!important;box-shadow:inset 3px 0 0 #27b5ff!important}
+
+/* Price chart time-period labels */
+.chart-time-labels{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin:0 26px 0;padding:0 0 2px;color:#8ea3b8;font-size:8px;line-height:14px;text-align:center;font-variant-numeric:tabular-nums;white-space:nowrap}.chart-time-labels span{overflow:hidden;text-overflow:ellipsis}.quote canvas{height:145px}.quote{overflow:hidden}
