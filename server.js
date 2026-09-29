@@ -173,7 +173,11 @@ const server=http.createServer(async(req,res)=>{
       if(u.searchParams.get("refresh")==="1" && real.clearOutlookCache) real.clearOutlookCache(requested);
       return respond(res,200,await real.getOutlook(requested,{refresh:u.searchParams.get("refresh")==="1"}));
     }
-    if(u.pathname==="/api/unusual-volume") { if(u.searchParams.get("refresh")==="1" && real.clearUnusualVolumeCache) real.clearUnusualVolumeCache(); return respond(res,200,await real.getUnusualOptionVolume({refresh:u.searchParams.get("refresh")==="1"})); }
+    if(u.pathname==="/api/predictions") {
+  if(u.searchParams.get("refresh")==="1" && real.clearPredictionsCache) real.clearPredictionsCache();
+  return respond(res,200,await real.getPredictions({refresh:u.searchParams.get("refresh")==="1"}));
+}
+if(u.pathname==="/api/unusual-volume") { if(u.searchParams.get("refresh")==="1" && real.clearUnusualVolumeCache) real.clearUnusualVolumeCache(); return respond(res,200,await real.getUnusualOptionVolume({refresh:u.searchParams.get("refresh")==="1"})); }
     if(u.pathname==="/api/news"){
       const symbol=(u.searchParams.get("symbol")||"").toUpperCase();
       const news=await real.getNews(symbol?[symbol]:[]);return respond(res,200,{news,source:"Alpaca"});
