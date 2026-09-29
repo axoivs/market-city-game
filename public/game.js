@@ -186,7 +186,7 @@ async function loadOutlook(days,force=false){
     body.innerHTML='<div class="empty">'+esc(e.message)+'</div>';
   }
 }
-async async function openPredictionOption(x){
+async function openPredictionOption(x){
   if(!x?.symbol||!x?.contractSymbol)return;
   try{
     const existing=optionWatchlist().find(o=>o.contractSymbol===x.contractSymbol);
@@ -220,7 +220,7 @@ async async function openPredictionOption(x){
     toast(x.contractSymbol+" added to Options Market Watch. Review the live ASK and choose BUY OPTION.");
   }catch(e){toast(e.message)}
 }
-async async function openScannerOption(x){
+async function openScannerOption(x){
   if(!x?.symbol||!x?.contractSymbol)return;
   try{
     // Add the exact contract, not merely the underlying stock.
