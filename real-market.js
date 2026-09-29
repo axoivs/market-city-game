@@ -50,7 +50,7 @@ async function getStockQuote(symbol) {
   const [quotes, trades, bars] = await Promise.all([
     request(DATA_HOST, "/v2/stocks/quotes/latest?symbols=" + encodeURIComponent(s) + "&feed=" + encodeURIComponent(STOCK_FEED)),
     request(DATA_HOST, "/v2/stocks/trades/latest?symbols=" + encodeURIComponent(s) + "&feed=" + encodeURIComponent(STOCK_FEED)),
-    request(DATA_HOST, "/v2/stocks/bars?symbols=" + encodeURIComponent(s) + "&timeframe=1Min&limit=120&feed=" + encodeURIComponent(STOCK_FEED) + "&adjustment=raw")
+    request(DATA_HOST, "/v2/stocks/bars?symbols=" + encodeURIComponent(s) + "&timeframe=1Min&limit=1000&feed=" + encodeURIComponent(STOCK_FEED) + "&adjustment=raw")
   ]);
   const q = quotes?.quotes?.[s] || {}, t = trades?.trades?.[s] || {}, b = Array.isArray(bars?.bars?.[s]) ? bars.bars[s] : [];
   const bid = Number(q.bp), ask = Number(q.ap), last = Number(t.p);
@@ -1101,7 +1101,7 @@ function publicStock(s) {
     previousClose: finite(s.previousClose) ? round(s.previousClose) : null,
     change: finite(s.change) ? round(s.change) : null,
     changePct: finite(s.changePct) ? round(s.changePct,2) : null,
-    history: s.history || [], updatedAt: s.updatedAt || null, stream: !!s.stream, feed: STOCK_FEED, real: true
+    history: s.history || [], historyDates: s.historyDates || [], historyTimeframe: s.historyTimeframe || "1Min", updatedAt: s.updatedAt || null, stream: !!s.stream, feed: STOCK_FEED, real: true
   };
 }
 function start(market, symbols, round, broadcast) {
