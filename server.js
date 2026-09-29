@@ -66,6 +66,10 @@ function portfolioValue(p){
   for(const o of p.options||[])v+=optionMark(o)*(o.quantity||0)*(o.size||100);
   return round(v);
 }
+function portfolioLevel(p){
+  const gain=Math.max(0,portfolioValue(p)-100000);
+  return 1+Math.floor(gain/10000);
+}
 function portfolioStats(p){
   let stockCurrent=0,stockCost=0,stockQty=0;
   for(const [s,q0] of Object.entries(p.positions||{})){
@@ -107,16 +111,16 @@ function portfolioStats(p){
   };
 }
 function publicPlayer(p){
-  return {id:p.id,name:p.name,username:p.username||"",cash:round(p.cash),portfolioValue:portfolioValue(p),xp:p.xp,level:p.level,
+  return {id:p.id,name:p.name,username:p.username||"",cash:round(p.cash),portfolioValue:portfolioValue(p),xp:p.xp,level:portfolioLevel(p),
     stats:portfolioStats(p),watchlist:normalizeWatchlist(p.watchlist||[]),positions:p.positions,options:(p.options||[]).map(o=>({...o,marketPrice:optionMark(o)})),missions:p.missions};
 }
 function marketPayload(){return Object.values(market).map(real.publicStock);}
-function leaderboard(){return Object.values(players).map(p=>({name:p.name,value:portfolioValue(p),level:p.level}))
+function leaderboard(){return Object.values(players).map(p=>({name:p.name,value:portfolioValue(p),level:portfolioLevel(p)}))
   .sort((a,b)=>b.value-a.value).slice(0,10);}
 function payloadFor(p){return {type:"state",player:publicPlayer(p),market:marketPayload(),leaderboard:leaderboard(),online:sockets.size,marketReady};}
 function send(ws,x){if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(x));}
 function broadcast(x){const m=JSON.stringify(x);for(const ws of sockets.values())if(ws.readyState===WebSocket.OPEN)ws.send(m);}
-function mission(p,k){if(p.missions[k])return;p.missions[k]=true;p.xp+=k==="profitGoal"?500:100;p.level=1+Math.floor(p.xp/500);}
+function mission(p,k){if(p.missions[k])return;p.missions[k]=true;p.xp+=k==="profitGoal"?500:100;}
 
 function stockOrder(p,symbol,side,qty){
   const px=stockMark(symbol); qty=Math.floor(safe(qty));
