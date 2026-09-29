@@ -11,6 +11,7 @@ const PUBLIC = path.join(__dirname, "public");
 const DATA_DIR = path.join(__dirname, "data");
 const PLAYERS_FILE = path.join(DATA_DIR, "players.json");
 const ACCOUNTS_FILE = path.join(DATA_DIR, "accounts.json");
+const COMMUNITY_FILE = path.join(DATA_DIR, "community.json");
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const SYMBOLS = {
@@ -26,6 +27,7 @@ for (const [symbol,name] of Object.entries(SYMBOLS)) {
 
 const players = loadPlayers();
 const accounts = loadAccounts();
+const community = loadCommunity();
 const sockets = new Map();
 const recentTrades = [];
 let marketReady = false;
@@ -40,6 +42,25 @@ function savePlayers() {
 }
 function loadAccounts(){try{return JSON.parse(fs.readFileSync(ACCOUNTS_FILE,"utf8"));}catch{return {};}}
 function saveAccounts(){const tmp=ACCOUNTS_FILE+".tmp";fs.writeFileSync(tmp,JSON.stringify(accounts,null,2));fs.renameSync(tmp,ACCOUNTS_FILE);}
+function loadCommunity(){
+  try{
+    const x=JSON.parse(fs.readFileSync(COMMUNITY_FILE,"utf8"));
+    return {groups:Array.isArray(x.groups)?x.groups:[],topics:Array.isArray(x.topics)?x.topics:[],replies:Array.isArray(x.replies)?x.replies:[]};
+  }catch{return {groups:[],topics:[],replies:[]};}
+}
+function saveCommunity(){const tmp=COMMUNITY_FILE+".tmp";fs.writeFileSync(tmp,JSON.stringify(community,null,2));fs.renameSync(tmp,COMMUNITY_FILE);}
+function publicCommunity(){
+  return {
+    groups:community.groups.slice(-100).reverse(),
+    topics:community.topics.slice(-200).reverse(),
+    replies:community.replies.slice(-500).reverse()
+  };
+}
+function requireAuthenticated(id){
+  const p=player(id), a=accounts[accountKey(p.username)];
+  if(!a||a.auto)throw new Error("Login required to create or join community groups and topics.");
+  return p;
+}
 function normalizeWatchlist(list){return [...new Set((Array.isArray(list)?list:[]).map(x=>String(x||"").toUpperCase().replace(/[^A-Z0-9.-]/g,"")).filter(Boolean))].slice(0,50);}
 function accountKey(v){return String(v||"").trim().toLowerCase();}
 function validAccountName(v){return /^[a-z0-9][a-z0-9_-]{2,23}$/i.test(String(v||"").trim());}
@@ -190,13 +211,15 @@ function portfolioStats(p){
   };
 }
 function publicPlayer(p){
-  return {id:p.id,name:p.name,username:p.username||"",cash:round(p.cash),startingCapital:round(finite(p.startingCapital)&&Number(p.startingCapital)>0?p.startingCapital:100000),portfolioValue:portfolioValue(p),xp:p.xp,level:portfolioLevel(p),
+  const account=accounts[accountKey(p.username)];
+  const authenticated=!!account&&!account.auto;
+  return {id:p.id,name:p.name,username:p.username||"",authenticated,cash:round(p.cash),startingCapital:round(finite(p.startingCapital)&&Number(p.startingCapital)>0?p.startingCapital:100000),portfolioValue:portfolioValue(p),xp:p.xp,level:portfolioLevel(p),
     stats:portfolioStats(p),watchlist:normalizeWatchlist(p.watchlist||[]),positions:p.positions,options:(p.options||[]).map(o=>({...o,marketPrice:optionMark(o)})),missions:p.missions};
 }
 function marketPayload(){return Object.values(market).map(real.publicStock);}
 function leaderboard(){return Object.values(players).map(p=>({name:p.name,value:portfolioValue(p),level:portfolioLevel(p)}))
   .sort((a,b)=>b.value-a.value).slice(0,10);}
-function payloadFor(p){return {type:"state",player:publicPlayer(p),market:marketPayload(),leaderboard:leaderboard(),online:sockets.size,marketReady};}
+function payloadFor(p){return {type:"state",player:publicPlayer(p),market:marketPayload(),leaderboard:leaderboard(),online:sockets.size,marketReady,community:publicCommunity()};}
 function send(ws,x){if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(x));}
 function broadcast(x){const m=JSON.stringify(x);for(const ws of sockets.values())if(ws.readyState===WebSocket.OPEN)ws.send(m);}
 function mission(p,k){if(p.missions[k])return;p.missions[k]=true;p.xp+=k==="profitGoal"?500:100;}
@@ -323,7 +346,7 @@ const server=http.createServer(async(req,res)=>{
     if(u.pathname==="/api/health")return respond(res,200,{ok:true,game:"market-city",alpaca:true,feed:{stock:process.env.ALPACA_STOCK_FEED||"iex",options:process.env.ALPACA_OPTION_FEED||"indicative"},time:Date.now()});
     if(u.pathname==="/api/bootstrap"){
       const id=idValid(u.searchParams.get("playerId"))?u.searchParams.get("playerId"):crypto.randomUUID();
-      const p=player(id);return respond(res,200,{playerId:id,player:publicPlayer(p),market:marketPayload(),leaderboard:leaderboard(),online:sockets.size,marketReady});
+      const p=player(id);return respond(res,200,{playerId:id,player:publicPlayer(p),market:marketPayload(),leaderboard:leaderboard(),online:sockets.size,marketReady,community:publicCommunity()});
     }
     if(u.pathname==="/api/market")return respond(res,200,{market:marketPayload(),online:sockets.size,marketReady});
     if(u.pathname==="/api/assets"){
@@ -359,6 +382,9 @@ const server=http.createServer(async(req,res)=>{
   return respond(res,200,await real.getPredictions({refresh:u.searchParams.get("refresh")==="1"}));
 }
 if(u.pathname==="/api/unusual-volume") { if(u.searchParams.get("refresh")==="1" && real.clearUnusualVolumeCache) real.clearUnusualVolumeCache(); return respond(res,200,await real.getUnusualOptionVolume({refresh:u.searchParams.get("refresh")==="1"})); }
+    if(u.pathname==="/api/community"){
+      return respond(res,200,{community:publicCommunity()});
+    }
     if(u.pathname==="/api/news"){
       const symbol=(u.searchParams.get("symbol")||"").toUpperCase();
       const news=await real.getNews(symbol?[symbol]:[]);return respond(res,200,{news,source:"Alpaca"});
@@ -388,6 +414,37 @@ if(u.pathname==="/api/unusual-volume") { if(u.searchParams.get("refresh")==="1" 
       else if(b.type==="optionOrder"){await optionOrder(p,b);await updateOptionPositions();}
       else if(b.type==="optionSell"){await optionSell(p,b);await updateOptionPositions();}
       else if(b.type==="tourComplete")mission(p,"cityTour");
+      else if(["createGroup","joinGroup","createTopic","replyTopic"].includes(b.type)){
+        const cp=requireAuthenticated(id);
+        if(b.type==="createGroup"){
+          const name=String(b.name||"").trim().slice(0,50),description=String(b.description||"").trim().slice(0,240);
+          if(name.length<3)throw new Error("Group name must be at least 3 characters.");
+          if(community.groups.some(g=>g.name.toLowerCase()===name.toLowerCase()))throw new Error("That group already exists.");
+          community.groups.push({id:crypto.randomUUID(),name,description,creator:cp.name,creatorUsername:cp.username,members:[cp.username],createdAt:Date.now(),category:String(b.category||"Market Talk").slice(0,30)});
+        }else if(b.type==="joinGroup"){
+          const gid=String(b.groupId||""),g=community.groups.find(x=>x.id===gid);
+          if(!g)throw new Error("Group not found.");
+          if(!g.members.includes(cp.username))g.members.push(cp.username);
+        }else if(b.type==="createTopic"){
+          const title=String(b.title||"").trim().slice(0,100),body=String(b.body||"").trim().slice(0,2000),gid=String(b.groupId||"");
+          if(title.length<3||body.length<1)throw new Error("Add a topic title and message.");
+          const g=community.groups.find(x=>x.id===gid);
+          if(!g)throw new Error("Choose a group first.");
+          if(!g.members.includes(cp.username))throw new Error("Join the group before creating a topic.");
+          community.topics.push({id:crypto.randomUUID(),groupId:gid,groupName:g.name,title,body,author:cp.name,authorUsername:cp.username,createdAt:Date.now(),replies:0});
+        }else{
+          const topic=community.topics.find(x=>x.id===String(b.topicId||""));
+          const body=String(b.body||"").trim().slice(0,1500);
+          if(!topic)throw new Error("Topic not found.");
+          const g=community.groups.find(x=>x.id===topic.groupId);
+          if(!g||!g.members.includes(cp.username))throw new Error("Join the group before replying.");
+          if(!body)throw new Error("Write a reply first.");
+          community.replies.push({id:crypto.randomUUID(),topicId:topic.id,body,author:cp.name,authorUsername:cp.username,createdAt:Date.now()});
+          topic.replies=Number(topic.replies||0)+1;
+        }
+        saveCommunity();
+        return respond(res,200,{playerId:id,player:publicPlayer(p),community:publicCommunity()});
+      }
       else throw new Error("Unknown action");
       return respond(res,200,{playerId:id,player:publicPlayer(p),market:marketPayload(),leaderboard:leaderboard(),online:sockets.size,marketReady});
     }
