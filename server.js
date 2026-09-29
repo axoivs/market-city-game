@@ -49,10 +49,10 @@ function safe(n,f=0){return finite(n)?Number(n):f;}
 function idValid(v){return /^[a-f0-9-]{20,80}$/i.test(String(v||""));}
 function newPlayer(id){return {
   id,name:"Trader-"+id.slice(-4).toUpperCase(),username:"",cash:100000,xp:0,level:1,
-  positions:{},options:[],watchlist:Object.keys(SYMBOLS),missions:{firstTrade:false,profitGoal:false,cityTour:false},
+  positions:{},stockCostBasis:{},stockBought:0,stockSold:0,realizedPL:0,totalTrades:0,options:[],watchlist:Object.keys(SYMBOLS),missions:{firstTrade:false,profitGoal:false,cityTour:false},
   createdAt:Date.now(),updatedAt:Date.now()
 };}
-function player(id){if(!players[id]){players[id]=newPlayer(id);savePlayers();}else if(!Array.isArray(players[id].watchlist)){players[id].watchlist=Object.keys(SYMBOLS);savePlayers();}return players[id];}
+function player(id){if(!players[id]){players[id]=newPlayer(id);savePlayers();}else{let changed=false;if(!Array.isArray(players[id].watchlist)){players[id].watchlist=Object.keys(SYMBOLS);changed=true;}if(!players[id].stockCostBasis||typeof players[id].stockCostBasis!=="object"){players[id].stockCostBasis={};changed=true;}for(const k of ["stockBought","stockSold","realizedPL","totalTrades"])if(!finite(players[id][k])){players[id][k]=0;changed=true;}if(changed)savePlayers();}return players[id];}
 
 function stockMark(symbol){
   const s=market[symbol];
@@ -66,9 +66,17 @@ function portfolioValue(p){
   for(const o of p.options||[])v+=optionMark(o)*(o.quantity||0)*(o.size||100);
   return round(v);
 }
+function portfolioStats(p){
+  let stockCurrent=0,stockCost=0,stockQty=0;
+  for(const [s,q0] of Object.entries(p.positions||{})){const q=Number(q0)||0;stockQty+=q;const px=stockMark(s);if(px!=null)stockCurrent+=q*px;stockCost+=Number(p.stockCostBasis?.[s]||0);}
+  let optionCurrent=0,optionCost=0,optionQty=0;
+  for(const o of p.options||[]){const q=Number(o.quantity)||0,size=Number(o.size)||100;optionQty+=q;optionCost+=(Number(o.entryPrice)||0)*q*size;optionCurrent+=optionMark(o)*q*size;}
+  const currentHoldings=stockCurrent+optionCurrent,totalCost=stockCost+optionCost,unrealizedPL=currentHoldings-totalCost,realizedPL=Number(p.realizedPL)||0,netPL=realizedPL+unrealizedPL;
+  return {stockBought:round(p.stockBought),stockSold:round(p.stockSold),optionBought:round(optionCost),totalBought:round((p.stockBought||0)+optionCost),currentHoldings:round(currentHoldings),stockCurrent:round(stockCurrent),optionCurrent:round(optionCurrent),costBasis:round(totalCost),unrealizedPL:round(unrealizedPL),realizedPL:round(realizedPL),netPL:round(netPL),returnPct:totalCost?round(unrealizedPL/totalCost*100):0,stockQty,optionQty,totalTrades:Number(p.totalTrades)||0};
+}
 function publicPlayer(p){
   return {id:p.id,name:p.name,username:p.username||"",cash:round(p.cash),portfolioValue:portfolioValue(p),xp:p.xp,level:p.level,
-    watchlist:normalizeWatchlist(p.watchlist||[]),positions:p.positions,options:(p.options||[]).map(o=>({...o,marketPrice:optionMark(o)})),missions:p.missions};
+    stats:portfolioStats(p),watchlist:normalizeWatchlist(p.watchlist||[]),positions:p.positions,options:(p.options||[]).map(o=>({...o,marketPrice:optionMark(o)})),missions:p.missions};
 }
 function marketPayload(){return Object.values(market).map(real.publicStock);}
 function leaderboard(){return Object.values(players).map(p=>({name:p.name,value:portfolioValue(p),level:p.level}))
@@ -86,11 +94,14 @@ function stockOrder(p,symbol,side,qty){
   if(side==="buy"){
     if(gross>p.cash)throw new Error("Not enough virtual cash.");
     p.cash-=gross;p.positions[symbol]=(p.positions[symbol]||0)+qty;
+    p.stockCostBasis[symbol]=round((p.stockCostBasis[symbol]||0)+gross);p.stockBought=round((p.stockBought||0)+gross);
   }else if(side==="sell"){
     if((p.positions[symbol]||0)<qty)throw new Error("Not enough shares.");
-    p.positions[symbol]-=qty;p.cash+=gross;if(!p.positions[symbol])delete p.positions[symbol];
+    const oldQty=p.positions[symbol]||0,oldCost=Number(p.stockCostBasis[symbol]||0),avgCost=oldQty?oldCost/oldQty:0;
+    p.positions[symbol]-=qty;p.cash+=gross;p.stockSold=round((p.stockSold||0)+gross);p.realizedPL=round((p.realizedPL||0)+(gross-avgCost*qty));
+    p.stockCostBasis[symbol]=round(Math.max(0,oldCost-avgCost*qty));if(!p.positions[symbol]){delete p.positions[symbol];delete p.stockCostBasis[symbol];}
   }else throw new Error("Invalid side.");
-  mission(p,"firstTrade");if(portfolioValue(p)>=110000)mission(p,"profitGoal");
+  p.totalTrades=(p.totalTrades||0)+1;mission(p,"firstTrade");if(portfolioValue(p)>=110000)mission(p,"profitGoal");
   p.updatedAt=Date.now();savePlayers();
   recentTrades.unshift({time:Date.now(),name:p.name,symbol,side,quantity:qty,price:px,type:"stock"});
   recentTrades.splice(20);
@@ -108,6 +119,7 @@ async function optionOrder(p,msg){
   const size=c.size||100,cost=round(ask*qty*size);
   if(cost>p.cash)throw new Error("Not enough virtual cash.");
   p.cash-=cost;
+  p.totalTrades=(p.totalTrades||0)+1;
   p.options.push({id:crypto.randomUUID(),contractSymbol:c.contractSymbol,symbol,type:c.type,
     strike:c.strike,expiration:c.expiration,expirationDate:c.expirationDate,quantity:qty,size,
     entryPrice:ask,marketPrice:ask,bid:c.bid,ask:c.ask,delta:c.delta,gamma:c.gamma,theta:c.theta,vega:c.vega,iv:c.iv});
