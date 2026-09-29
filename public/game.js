@@ -101,7 +101,9 @@ function orderStock(side){send({type:"stockOrder",symbol:state.selected,side,qua
 function orderOption(){const o=state.selectedContract;if(!o)return toast("Select an option contract first.");send({type:"optionOrder",symbol:o.symbol,contractSymbol:o.contractSymbol,quantity:Math.floor(Number($("contracts").value)),expirationDate:o.expirationDate})}
 function radarStockRow(x){
   const cls=x.trend==="UP"?"up":x.trend==="DOWN"?"down":"flat";
-  return '<button class="radar-row radar-click" data-symbol="'+esc(x.symbol)+'"><span><b>'+esc(x.symbol)+'</b><small>'+money(x.price)+'</small></span><span class="radar-right"><b class="'+cls+'">'+(x.changePct>=0?"+":"")+Number(x.changePct||0).toFixed(2)+'%</b><small>'+x.trend+' · '+x.trendScore+'</small></span></button>';
+  const pct=Number.isFinite(Number(x.changePct))?Number(x.changePct):null;
+  const pctLabel=pct===null?"—":(pct>=0?"+":"")+pct.toFixed(2)+"%";
+  return '<button class="radar-row radar-click" data-symbol="'+esc(x.symbol)+'"><span><b>'+esc(x.symbol)+'</b><small>'+money(x.price)+'</small></span><span class="radar-right"><b class="'+cls+'">'+pctLabel+'</b><small>'+x.trend+' · '+x.trendScore+'</small></span></button>';
 }
 function radarSetupRow(x){
   const observed=x.ask!=null?x.ask:x.observedPrice!=null?x.observedPrice:x.last;
