@@ -49,10 +49,10 @@ function safe(n,f=0){return finite(n)?Number(n):f;}
 function idValid(v){return /^[a-f0-9-]{20,80}$/i.test(String(v||""));}
 function newPlayer(id){return {
   id,name:"Trader-"+id.slice(-4).toUpperCase(),username:"",cash:100000,xp:0,level:1,
-  positions:{},stockCostBasis:{},stockBought:0,stockSold:0,realizedPL:0,totalTrades:0,options:[],watchlist:Object.keys(SYMBOLS),missions:{firstTrade:false,profitGoal:false,cityTour:false},
+  positions:{},stockCostBasis:{},stockBought:0,stockSold:0,realizedPL:0,optionBought:0,optionSold:0,optionRealizedPL:0,totalTrades:0,options:[],watchlist:Object.keys(SYMBOLS),missions:{firstTrade:false,profitGoal:false,cityTour:false},
   createdAt:Date.now(),updatedAt:Date.now()
 };}
-function player(id){if(!players[id]){players[id]=newPlayer(id);savePlayers();}else{let changed=false;if(!Array.isArray(players[id].watchlist)){players[id].watchlist=Object.keys(SYMBOLS);changed=true;}if(!players[id].stockCostBasis||typeof players[id].stockCostBasis!=="object"){players[id].stockCostBasis={};changed=true;}for(const k of ["stockBought","stockSold","realizedPL","totalTrades"])if(!finite(players[id][k])){players[id][k]=0;changed=true;}if(changed)savePlayers();}return players[id];}
+function player(id){if(!players[id]){players[id]=newPlayer(id);savePlayers();}else{let changed=false;if(!Array.isArray(players[id].watchlist)){players[id].watchlist=Object.keys(SYMBOLS);changed=true;}if(!players[id].stockCostBasis||typeof players[id].stockCostBasis!=="object"){players[id].stockCostBasis={};changed=true;}for(const k of ["stockBought","stockSold","realizedPL","optionBought","optionSold","optionRealizedPL","totalTrades"])if(!finite(players[id][k])){players[id][k]=0;changed=true;}if(changed)savePlayers();}return players[id];}
 
 function stockMark(symbol){
   const s=market[symbol];
@@ -68,11 +68,43 @@ function portfolioValue(p){
 }
 function portfolioStats(p){
   let stockCurrent=0,stockCost=0,stockQty=0;
-  for(const [s,q0] of Object.entries(p.positions||{})){const q=Number(q0)||0;stockQty+=q;const px=stockMark(s);if(px!=null)stockCurrent+=q*px;stockCost+=Number(p.stockCostBasis?.[s]||0);}
+  for(const [s,q0] of Object.entries(p.positions||{})){
+    const q=Number(q0)||0;stockQty+=q;
+    const px=stockMark(s);if(px!=null)stockCurrent+=q*px;
+    stockCost+=Number(p.stockCostBasis?.[s]||0);
+  }
   let optionCurrent=0,optionCost=0,optionQty=0;
-  for(const o of p.options||[]){const q=Number(o.quantity)||0,size=Number(o.size)||100;optionQty+=q;optionCost+=(Number(o.entryPrice)||0)*q*size;optionCurrent+=optionMark(o)*q*size;}
-  const currentHoldings=stockCurrent+optionCurrent,totalCost=stockCost+optionCost,unrealizedPL=currentHoldings-totalCost,realizedPL=Number(p.realizedPL)||0,netPL=realizedPL+unrealizedPL;
-  return {stockBought:round(p.stockBought),stockSold:round(p.stockSold),optionBought:round(optionCost),totalBought:round((p.stockBought||0)+optionCost),currentHoldings:round(currentHoldings),stockCurrent:round(stockCurrent),optionCurrent:round(optionCurrent),costBasis:round(totalCost),unrealizedPL:round(unrealizedPL),realizedPL:round(realizedPL),netPL:round(netPL),returnPct:totalCost?round(unrealizedPL/totalCost*100):0,stockQty,optionQty,totalTrades:Number(p.totalTrades)||0};
+  for(const o of p.options||[]){
+    const q=Number(o.quantity)||0,size=Number(o.size)||100;
+    optionQty+=q;
+    optionCost+=(Number(o.entryPrice)||0)*q*size;
+    optionCurrent+=optionMark(o)*q*size;
+  }
+  const currentHoldings=stockCurrent+optionCurrent;
+  const totalCost=stockCost+optionCost;
+  const unrealizedPL=currentHoldings-totalCost;
+  const realizedPL=Number(p.realizedPL||0)+Number(p.optionRealizedPL||0);
+  const netPL=realizedPL+unrealizedPL;
+  return {
+    stockBought:round(p.stockBought),
+    stockSold:round(p.stockSold),
+    optionBought:round(p.optionBought),
+    optionSold:round(p.optionSold),
+    totalBought:round(Number(p.stockBought||0)+Number(p.optionBought||0)),
+    currentHoldings:round(currentHoldings),
+    stockCurrent:round(stockCurrent),
+    optionCurrent:round(optionCurrent),
+    costBasis:round(totalCost),
+    stockCostBasis:round(stockCost),
+    optionCostBasis:round(optionCost),
+    unrealizedPL:round(unrealizedPL),
+    realizedPL:round(realizedPL),
+    stockRealizedPL:round(p.realizedPL),
+    optionRealizedPL:round(p.optionRealizedPL),
+    netPL:round(netPL),
+    returnPct:totalCost?round(unrealizedPL/totalCost*100):0,
+    stockQty,optionQty,totalTrades:Number(p.totalTrades)||0
+  };
 }
 function publicPlayer(p){
   return {id:p.id,name:p.name,username:p.username||"",cash:round(p.cash),portfolioValue:portfolioValue(p),xp:p.xp,level:p.level,
@@ -119,27 +151,81 @@ async function optionOrder(p,msg){
   const size=c.size||100,cost=round(ask*qty*size);
   if(cost>p.cash)throw new Error("Not enough virtual cash.");
   p.cash-=cost;
+  p.optionBought=round((p.optionBought||0)+cost);
   p.totalTrades=(p.totalTrades||0)+1;
   p.options.push({id:crypto.randomUUID(),contractSymbol:c.contractSymbol,symbol,type:c.type,
     strike:c.strike,expiration:c.expiration,expirationDate:c.expirationDate,quantity:qty,size,
-    entryPrice:ask,marketPrice:ask,bid:c.bid,ask:c.ask,delta:c.delta,gamma:c.gamma,theta:c.theta,vega:c.vega,iv:c.iv});
+    entryPrice:ask,marketPrice:ask,bid:c.bid,ask:c.ask,last:c.last,delta:c.delta,gamma:c.gamma,theta:c.theta,vega:c.vega,iv:c.iv});
   mission(p,"firstTrade");p.updatedAt=Date.now();savePlayers();
   recentTrades.unshift({time:Date.now(),name:p.name,symbol,side:"buy",quantity:qty,price:ask,type:"option",contractSymbol:c.contractSymbol});
   recentTrades.splice(20);
 }
 
-function updateOptionPositions(){
+async function updateOptionPositions(){
+  const groups=new Map();
   for(const p of Object.values(players)){
     for(const o of p.options||[]){
-      const live=real.getOptionLive ? real.getOptionLive(o.contractSymbol):null;
-      if(live){
-        const bid=Number(live.bid),ask=Number(live.ask),last=Number(live.last);
-        const mark=finite(bid)&&finite(ask)?(bid+ask)/2:(finite(last)?last:null);
-        if(finite(mark))o.marketPrice=round(mark);
-        if(finite(bid))o.bid=round(bid);if(finite(ask))o.ask=round(ask);
-      }
+      const key=String(o.symbol||"").toUpperCase()+"|"+String(o.expirationDate||"");
+      if(!groups.has(key))groups.set(key,{symbol:String(o.symbol||"").toUpperCase(),expirationDate:o.expirationDate});
     }
   }
+  if(!groups.size)return;
+  for(const g of groups.values()){
+    try{
+      const chain=await real.getOptionChain(g.symbol,g.expirationDate);
+      const bySymbol=new Map(chain.chain.map(x=>[x.contractSymbol,x]));
+      for(const p of Object.values(players)){
+        for(const o of p.options||[]){
+          if(String(o.symbol||"").toUpperCase()!==g.symbol||String(o.expirationDate||"")!==g.expirationDate)continue;
+          const c=bySymbol.get(o.contractSymbol);
+          if(!c)continue;
+          o.bid=finite(c.bid)?round(c.bid):null;
+          o.ask=finite(c.ask)?round(c.ask):null;
+          o.last=finite(c.last)?round(c.last):null;
+          o.delta=c.delta;o.gamma=c.gamma;o.theta=c.theta;o.vega=c.vega;o.iv=c.iv;
+          const mark=finite(c.bid)&&finite(c.ask)&&c.bid>0&&c.ask>0
+            ?(Number(c.bid)+Number(c.ask))/2
+            :(finite(c.bid)&&c.bid>0?Number(c.bid):(finite(c.last)&&c.last>0?Number(c.last):null));
+          if(finite(mark))o.marketPrice=round(mark);
+          o.updatedAt=c.updatedAt||Date.now();
+        }
+      }
+    }catch(e){console.error("Option holding refresh",g.symbol,g.expirationDate,e.message);}
+  }
+  savePlayers();
+}
+
+async function optionSell(p,msg){
+  const id=String(msg.positionId||"");
+  const contract=String(msg.contractSymbol||"");
+  const index=(id?p.options.findIndex(o=>o.id===id):p.options.findIndex(o=>o.contractSymbol===contract));
+  if(index<0)throw new Error("Option holding not found.");
+  const o=p.options[index];
+  const qty=Math.floor(safe(msg.quantity,1));
+  const heldQty=Number(o.quantity)||0;
+  if(qty<1||qty>heldQty)throw new Error("Invalid option quantity.");
+  const today=new Date().toISOString().slice(0,10);
+  if(o.expirationDate&&o.expirationDate<today)throw new Error("This option has expired and cannot be sold.");
+  const chain=await real.getOptionChain(o.symbol,o.expirationDate);
+  const c=chain.chain.find(x=>x.contractSymbol===o.contractSymbol);
+  if(!c)throw new Error("That real Alpaca option contract is no longer available.");
+  const bid=Number(c.bid);
+  if(!finite(bid)||bid<=0)throw new Error("No current Alpaca bid is available for this option.");
+  const size=Number(o.size||c.size)||100;
+  const proceeds=round(bid*qty*size);
+  const entry=Number(o.entryPrice)||0;
+  const cost=entry*qty*size;
+  p.cash+=proceeds;
+  p.optionSold=round((p.optionSold||0)+proceeds);
+  p.optionRealizedPL=round((p.optionRealizedPL||0)+(proceeds-cost));
+  o.quantity=heldQty-qty;
+  if(o.quantity<=0)p.options.splice(index,1);
+  else o.marketPrice=round(bid);
+  p.totalTrades=(p.totalTrades||0)+1;
+  if(portfolioValue(p)>=110000)mission(p,"profitGoal");
+  p.updatedAt=Date.now();savePlayers();
+  recentTrades.unshift({time:Date.now(),name:p.name,symbol:o.symbol,side:"sell",quantity:qty,price:bid,type:"option",contractSymbol:o.contractSymbol});
+  recentTrades.splice(20);
 }
 
 async function readBody(req){
@@ -216,7 +302,8 @@ if(u.pathname==="/api/unusual-volume") { if(u.searchParams.get("refresh")==="1" 
       if(b.type==="hello"){const n=String(b.name||"").trim().slice(0,24);if(n)p.name=n.replace(/[^a-zA-Z0-9 _-]/g,"");savePlayers();}
       else if(b.type==="saveWatchlist"){p.watchlist=normalizeWatchlist(b.watchlist);p.updatedAt=Date.now();savePlayers();}
       else if(b.type==="stockOrder")stockOrder(p,String(b.symbol||"").toUpperCase(),b.side,b.quantity);
-      else if(b.type==="optionOrder")await optionOrder(p,b);
+      else if(b.type==="optionOrder"){await optionOrder(p,b);await updateOptionPositions();}
+      else if(b.type==="optionSell"){await optionSell(p,b);await updateOptionPositions();}
       else if(b.type==="tourComplete")mission(p,"cityTour");
       else throw new Error("Unknown action");
       return respond(res,200,{playerId:id,player:publicPlayer(p),market:marketPayload(),leaderboard:leaderboard(),online:sockets.size,marketReady});
@@ -243,7 +330,8 @@ wss.on("connection",(ws,req)=>{
       if(m.type==="hello"){const n=String(m.name||"").trim().slice(0,24);if(n)p.name=n.replace(/[^a-zA-Z0-9 _-]/g,"");savePlayers();send(ws,payloadFor(p));}
       else if(m.type==="saveWatchlist"){p.watchlist=normalizeWatchlist(m.watchlist);p.updatedAt=Date.now();savePlayers();send(ws,payloadFor(p));}
       else if(m.type==="stockOrder"){stockOrder(p,String(m.symbol||"").toUpperCase(),m.side,m.quantity);send(ws,payloadFor(p));}
-      else if(m.type==="optionOrder"){await optionOrder(p,m);send(ws,payloadFor(p));}
+      else if(m.type==="optionOrder"){await optionOrder(p,m);await updateOptionPositions();send(ws,payloadFor(p));}
+      else if(m.type==="optionSell"){await optionSell(p,m);await updateOptionPositions();send(ws,payloadFor(p));}
       else if(m.type==="tourComplete"){mission(p,"cityTour");savePlayers();send(ws,payloadFor(p));}
       else if(m.type==="ping")send(ws,{type:"pong",time:Date.now()});
     }catch(e){send(ws,{type:"error",message:e.message||"Request failed"});}
@@ -258,7 +346,8 @@ async function boot(){
     broadcast({type:"market",market:marketPayload(),leaderboard:leaderboard(),online:sockets.size,marketReady});
   }catch(e){console.error("Initial Alpaca market load:",e.message);}
   real.start(market,SYMBOLS,round,p=>broadcast(p||{type:"market",market:marketPayload(),online:sockets.size,marketReady:true}));
+  await updateOptionPositions();
 }
 boot();
-setInterval(()=>{for(const p of Object.values(players))for(const o of p.options||[]){/* live marks arrive from Alpaca stream */}savePlayers();},15000);
+setInterval(async()=>{try{await updateOptionPositions();for(const [id,ws] of sockets){const p=players[id];if(p)send(ws,payloadFor(p));}}catch(e){console.error("Option holding refresh:",e.message);}},15000);
 server.listen(PORT,HOST,()=>console.log("Market City Alpaca engine listening on "+HOST+":"+PORT));
