@@ -536,7 +536,7 @@ async function getRadar() {
         const data = await request(
           DATA_HOST,
           "/v2/stocks/bars?symbols=" + encodeURIComponent(batch.join(",")) +
-          "&timeframe=1Day&limit=5&feed=" + encodeURIComponent(STOCK_FEED) +
+          "&timeframe=1Day&limit=1000&feed=" + encodeURIComponent(STOCK_FEED) +
           "&adjustment=raw"
         );
         const bmap = data?.bars || {};
