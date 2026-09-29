@@ -938,5 +938,6 @@ function start(market, symbols, round, broadcast) {
 }
 function clearRadarCache(){ radarCache.data=null; radarCache.at=0; }
 function clearOutlookCache(days){ if(getOutlook.cache) { if(days) getOutlook.cache.delete(Number(days)); else getOutlook.cache.clear(); } }
+function clearUnusualVolumeCache(){ volumeCache.data=null; volumeCache.at=0; }
 
-module.exports = { refreshMarket, start, getOptionChain, getExpirations, getNews, publicStock, getOptionLive, getAssets, getStockQuote, getRadar, clearRadarCache, getOutlook, clearOutlookCache, getUnusualOptionVolume };
+module.exports = { refreshMarket, start, getOptionChain, getExpirations, getNews, publicStock, getOptionLive, getAssets, getStockQuote, getRadar, clearRadarCache, getOutlook, clearOutlookCache, getUnusualOptionVolume, clearUnusualVolumeCache };
