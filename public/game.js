@@ -108,18 +108,18 @@ function radarSetupRow(x){
   const label=x.ask!=null?"ASK":"LAST";
   return '<button class="radar-row radar-click" data-symbol="'+esc(x.symbol)+'"><span><b>'+esc(x.symbol)+'</b><small>'+esc(x.contractSymbol)+'</small></span><span class="radar-right"><b>'+money(observed)+'</b><small>'+label+' · '+esc(x.type)+' · '+(x.days??"—")+'d · score '+(x.setupScore??"—")+'</small></span></button>';
 }
-async function openRadar(){
+async function openRadar(force=false){
   const d=$("drawer"),b=$("drawerContent");
   d.classList.remove("hidden");$("drawerTitle").textContent="MARKET RADAR";
   b.innerHTML='<div class="drawer-body"><div class="radar-note">REAL-DATA SIGNAL ENGINE. Scores rank current conditions; they do not predict guaranteed returns.</div><div id="radarBody">Loading real market radar…</div></div>';
   try{
-    const r=await api("/api/radar");
+    const r=await api("/api/radar"+(force?"?refresh=1":""));
     const allStocks=Array.isArray(r.stocks)?r.stocks:[];
     const up=(r.up||[]).map(radarStockRow).join("")||(allStocks.slice(0,8).map(radarStockRow).join("")||'<div class="empty">No Alpaca stock data returned.</div>');
     const down=(r.down||[]).map(radarStockRow).join("")||(allStocks.slice(8,16).map(radarStockRow).join("")||'<div class="empty">No additional Alpaca stock data returned.</div>');
     const setups=(r.setups||[]).map(radarSetupRow).join("")||'<div class="empty">No option setup passed the filters.</div>';
     const big=(r.bigActivity||[]).map(x=>'<button class="radar-row radar-click" data-symbol="'+esc(x.symbol)+'"><span><b>'+esc(x.symbol)+'</b><small>'+esc(x.contractSymbol)+'</small></span><span class="radar-right"><b>'+money(x.notional)+'</b><small>'+Number(x.volume||0).toLocaleString()+' volume</small></span></button>').join("")||'<div class="empty">No large-activity flag right now.</div>';
-    $("radarBody").innerHTML='<div class="radar-section"><h3>TRENDING UP</h3>'+up+'</div><div class="radar-section"><h3>TRENDING DOWN</h3>'+down+'</div><div class="radar-section"><h3>OPTION SETUP TRACKER</h3><p class="radar-help">Favors liquidity, tighter spreads, near-0.50 delta and 14–45 days to expiration.</p>'+setups+'</div><div class="radar-section"><h3>LARGE OPTION ACTIVITY</h3><p class="radar-help">Flags large notional activity. A trade print does not prove whether it was bought or sold.</p>'+big+'</div><div class="radar-foot">Updated '+new Date(r.updatedAt).toLocaleTimeString()+' · '+esc(r.feed||"Alpaca")+'</div>';
+    $("radarBody").innerHTML='<div class="radar-toolbar"><button id="refreshRadar" class="ghost">↻ REFRESH RADAR</button></div><div class="radar-section"><h3>TRENDING UP</h3>'+up+'</div><div class="radar-section"><h3>TRENDING DOWN</h3>'+down+'</div><div class="radar-section"><h3>OPTION SETUP TRACKER</h3><p class="radar-help">Favors liquidity, tighter spreads, near-0.50 delta and 14–45 days to expiration.</p>'+setups+'</div><div class="radar-section"><h3>LARGE OPTION ACTIVITY</h3><p class="radar-help">Flags large notional activity. A trade print does not prove whether it was bought or sold.</p>'+big+'</div><div class="radar-foot">Updated '+new Date(r.updatedAt).toLocaleTimeString()+' · '+esc(r.feed||"Alpaca")+'</div>'; $("refreshRadar").onclick=()=>openRadar(true);
     document.querySelectorAll(".radar-click").forEach(e=>e.onclick=()=>{selectSymbol(e.dataset.symbol);d.classList.add("hidden")});
   }catch(e){$("radarBody").innerHTML='<div class="empty">'+esc(e.message)+'</div>'}
 }
@@ -129,15 +129,15 @@ function outlookRow(x,period){
   const price=x.ask!=null?x.ask:null;
   return '<button class="radar-row" data-symbol="'+esc(x.symbol)+'"><span><b>'+esc(x.symbol)+'</b><small>'+esc(x.name||"")+' · '+period+'D '+(ret>=0?"+":"")+Number(ret||0).toFixed(2)+'%</small></span><span class="radar-right"><b class="'+cls+'">'+(x.contractSymbol?esc(x.contractSymbol):"No option")+'</b><small>'+ (price!=null?money(price)+" · ":"") +'score '+(x.setupScore??"—")+'</small></span></button>';
 }
-async function loadOutlook(days){
+async function loadOutlook(days,force=false){
   const body=$("outlookBody");
   if(!body)return;
   body.innerHTML='<div class="empty">Loading '+days+'-day real Alpaca outlook…</div>';
   try{
-    const r=await api("/api/outlook?days="+encodeURIComponent(days));
+    const r=await api("/api/outlook?days="+encodeURIComponent(days)+(force?"&refresh=1":""));
     const rows=(r.stocks||[]).map(x=>outlookRow(x,r.periodDays)).join("")||'<div class="empty">No qualifying real Alpaca option setups were returned.</div>';
-    body.innerHTML='<div class="radar-section"><h3>'+r.periodDays+'-DAY OPTION OUTLOOK</h3><p class="radar-help">Uses real Alpaca historical price data plus current option pricing, liquidity, spread, delta and premium fit. Scores are analytics, not guaranteed returns.</p>'+rows+'</div><div class="radar-foot">Updated '+new Date(r.updatedAt).toLocaleTimeString()+' · '+esc(r.source||"Alpaca")+'</div>';
-    document.querySelectorAll("#outlookBody .radar-row").forEach(e=>e.onclick=()=>{selectSymbol(e.dataset.symbol);$("drawer").classList.add("hidden")});
+    body.innerHTML='<div class="radar-toolbar"><button id="refreshOutlook" class="ghost">↻ REFRESH OUTLOOK</button></div><div class="radar-section"><h3>'+r.periodDays+'-DAY OPTION OUTLOOK</h3><p class="radar-help">Uses real Alpaca historical price data plus current option pricing, liquidity, spread, delta and premium fit. Scores are analytics, not guaranteed returns.</p>'+rows+'</div><div class="radar-foot">Updated '+new Date(r.updatedAt).toLocaleTimeString()+' · '+esc(r.source||"Alpaca")+'</div>';
+    document.querySelectorAll("#outlookBody .radar-row").forEach(e=>e.onclick=()=>{selectSymbol(e.dataset.symbol);$("drawer").classList.add("hidden")}); $("refreshOutlook").onclick=()=>loadOutlook(days,true);
   }catch(e){
     body.innerHTML='<div class="empty">'+esc(e.message)+'</div>';
   }
@@ -170,7 +170,7 @@ async function drawer(screen){
       const r=await api("/api/unusual-volume");
       const calls=(r.calls||[]).map(unusualRow).join("")||'<div class="empty">No unusual call volume returned.</div>';
       const puts=(r.puts||[]).map(unusualRow).join("")||'<div class="empty">No unusual put volume returned.</div>';
-      $("volumeBody").innerHTML='<div class="radar-section"><h3>UNUSUAL HIGH-VOLUME CALLS</h3>'+calls+'</div><div class="radar-section"><h3>UNUSUAL HIGH-VOLUME PUTS</h3>'+puts+'</div><div class="radar-foot">Updated '+new Date(r.updatedAt).toLocaleTimeString()+' · '+esc(r.source||"Alpaca")+'</div>';
+      $("volumeBody").innerHTML='<div class="radar-toolbar"><button id="refreshVolume" class="ghost">↻ REFRESH VOLUME</button></div><div class="radar-section"><h3>UNUSUAL HIGH-VOLUME CALLS</h3>'+calls+'</div><div class="radar-section"><h3>UNUSUAL HIGH-VOLUME PUTS</h3>'+puts+'</div><div class="radar-foot">Updated '+new Date(r.updatedAt).toLocaleTimeString()+' · '+esc(r.source||"Alpaca")+'</div>'; $("refreshVolume").onclick=()=>{delete window.__refreshVolume; drawer("volume")};
       document.querySelectorAll("#volumeBody .radar-row").forEach(e=>e.onclick=()=>{selectSymbol(e.dataset.symbol);d.classList.add("hidden")});
     }catch(e){$("volumeBody").innerHTML='<div class="empty">'+esc(e.message)+'</div>'}
   }else if(screen==="missions"){
