@@ -43,16 +43,46 @@ function saveAccounts(){const tmp=ACCOUNTS_FILE+".tmp";fs.writeFileSync(tmp,JSON
 function normalizeWatchlist(list){return [...new Set((Array.isArray(list)?list:[]).map(x=>String(x||"").toUpperCase().replace(/[^A-Z0-9.-]/g,"")).filter(Boolean))].slice(0,50);}
 function accountKey(v){return String(v||"").trim().toLowerCase();}
 function validAccountName(v){return /^[a-z0-9][a-z0-9_-]{2,23}$/i.test(String(v||"").trim());}
+function randomTraderUsername(id){
+  const base="Trader-"+String(id||"").replace(/[^a-z0-9]/gi,"").slice(-6).toUpperCase().padStart(6,"0");
+  let username=base,n=2;
+  while(accounts[accountKey(username)]) username=base+"-"+n++;
+  return username;
+}
+function randomLoginCode(){return crypto.randomBytes(9).toString("base64url").slice(0,12);}
 function round(n,d=2){const p=10**d;return Math.round(Number(n)*p)/p;}
 function finite(n){return n!==null&&n!==undefined&&n!==""&&Number.isFinite(Number(n));}
 function safe(n,f=0){return finite(n)?Number(n):f;}
 function idValid(v){return /^[a-f0-9-]{20,80}$/i.test(String(v||""));}
-function newPlayer(id){return {
-  id,name:"Trader-"+id.slice(-4).toUpperCase(),username:"",cash:100000,xp:0,level:1,
+function newPlayer(id){const username=randomTraderUsername(id);return {
+  id,name:username,username,cash:100000,xp:0,level:1,
   positions:{},stockCostBasis:{},stockBought:0,stockSold:0,realizedPL:0,optionBought:0,optionSold:0,optionRealizedPL:0,totalTrades:0,options:[],watchlist:Object.keys(SYMBOLS),missions:{firstTrade:false,profitGoal:false,cityTour:false},
   createdAt:Date.now(),updatedAt:Date.now()
 };}
-function player(id){if(!players[id]){players[id]=newPlayer(id);savePlayers();}else{let changed=false;if(!Array.isArray(players[id].watchlist)){players[id].watchlist=Object.keys(SYMBOLS);changed=true;}if(!players[id].stockCostBasis||typeof players[id].stockCostBasis!=="object"){players[id].stockCostBasis={};changed=true;}for(const k of ["stockBought","stockSold","realizedPL","optionBought","optionSold","optionRealizedPL","totalTrades"])if(!finite(players[id][k])){players[id][k]=0;changed=true;}if(changed)savePlayers();}return players[id];}
+function player(id){
+  if(!players[id]){
+    players[id]=newPlayer(id);
+    const p=players[id];
+    accounts[accountKey(p.username)]={username:p.username,playerId:id,code:randomLoginCode(),createdAt:Date.now(),auto:true};
+    saveAccounts();
+    savePlayers();
+  }else{
+    let changed=false;
+    const p=players[id];
+    if(!p.username){
+      p.username=randomTraderUsername(id);
+      if(!p.name||String(p.name).startsWith("Trader-"))p.name=p.username;
+      accounts[accountKey(p.username)]={username:p.username,playerId:id,code:randomLoginCode(),createdAt:Date.now(),auto:true};
+      saveAccounts();
+      changed=true;
+    }
+    if(!Array.isArray(p.watchlist)){p.watchlist=Object.keys(SYMBOLS);changed=true;}
+    if(!p.stockCostBasis||typeof p.stockCostBasis!=="object"){p.stockCostBasis={};changed=true;}
+    for(const k of ["stockBought","stockSold","realizedPL","optionBought","optionSold","optionRealizedPL","totalTrades"])if(!finite(p[k])){p[k]=0;changed=true;}
+    if(changed)savePlayers();
+  }
+  return players[id];
+}
 
 function stockMark(symbol){
   const s=market[symbol];
