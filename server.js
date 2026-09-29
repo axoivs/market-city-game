@@ -78,6 +78,26 @@ function player(id){
     }
     if(!Array.isArray(p.watchlist)){p.watchlist=Object.keys(SYMBOLS);changed=true;}
     if(!finite(p.startingCapital)||Number(p.startingCapital)<=0){p.startingCapital=100000;changed=true;}
+    // One-time reset for the Market City admin trading account.
+    if(String(p.username||"").trim().toLowerCase()==="admin" && p.adminAccountResetVersion!==1){
+      p.cash=100000;
+      p.startingCapital=100000;
+      p.positions={};
+      p.stockCostBasis={};
+      p.stockBought=0;
+      p.stockSold=0;
+      p.realizedPL=0;
+      p.optionBought=0;
+      p.optionSold=0;
+      p.optionRealizedPL=0;
+      p.totalTrades=0;
+      p.options=[];
+      p.xp=0;
+      p.level=1;
+      p.missions={firstTrade:false,profitGoal:false,cityTour:false};
+      p.adminAccountResetVersion=1;
+      changed=true;
+    }
     if(!p.stockCostBasis||typeof p.stockCostBasis!=="object"){p.stockCostBasis={};changed=true;}
     for(const k of ["stockBought","stockSold","realizedPL","optionBought","optionSold","optionRealizedPL","totalTrades"])if(!finite(p[k])){p[k]=0;changed=true;}
     const hasPositions=Object.values(p.positions||{}).some(q=>Number(q)>0)||(p.options||[]).some(o=>Number(o.quantity)>0);
