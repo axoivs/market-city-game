@@ -777,8 +777,7 @@ async function getOutlook(days = 30) {
   const radar = await getRadar();
   const candidates = (radar.stocks || [])
     .filter(x => x.hasOptions && finite(x.price) && x.price > 0 && finite(x.changePct))
-    .sort((a,b) => Math.abs(b.changePct) - Math.abs(a.changePct))
-    .slice(0, 40);
+    .sort((a,b) => Math.abs(b.changePct) - Math.abs(a.changePct));
 
   // Alpaca's multi-symbol bars endpoint requires an explicit historical
   // window. Without start=, a request can default to the current day.
@@ -883,7 +882,7 @@ async function getOutlook(days = 30) {
       0,100
     ),1);
 
-    rows.push({
+      rows.push({
       symbol:stock.symbol,name:stock.name,price:latest,
       returnPeriod:finite(returnHorizon)?round(returnHorizon,2):null,
       return30:finite(return30)?round(return30,2):null,
@@ -895,8 +894,11 @@ async function getOutlook(days = 30) {
       openInterest:option?.openInterest??null,
       premiumPct:finite(observedOptionPrice)?round((observedOptionPrice/latest)*100,2):null,
       setupScore,real:true
-    });
+      });
+    }
   }
+
+  await Promise.all(Array.from({length:Math.min(3,candidates.length)},optionWorker));
 
   rows.sort((a,b)=>b.setupScore-a.setupScore);
   const result = {
