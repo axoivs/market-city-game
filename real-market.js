@@ -623,8 +623,9 @@ async function getRadar(options = {}) {
         const data = await request(
           DATA_HOST,
           "/v2/stocks/bars?symbols=" + encodeURIComponent(batch.join(",")) +
-          "&timeframe=1Day&limit=1000&feed=" + encodeURIComponent(STOCK_FEED) +
-          "&adjustment=raw"
+          "&timeframe=1Day&start=" + encodeURIComponent(new Date(Date.now() - 14*86400000).toISOString()) +
+          "&limit=1000&feed=" + encodeURIComponent(STOCK_FEED) +
+          "&adjustment=raw&sort=asc"
         );
         const bmap = data?.bars || {};
         for (const symbol of batch) {
