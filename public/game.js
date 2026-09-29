@@ -258,7 +258,7 @@ function unusualRow(x){
   const cls=x.type==="call"?"up":"down";
   return '<button class="radar-row" data-symbol="'+esc(x.symbol)+'" data-contract="'+esc(x.contractSymbol)+'" data-option-type="'+esc(x.type)+'"><span><b>'+esc(x.symbol)+' · '+esc(x.type.toUpperCase())+'</b><small>'+esc(x.contractSymbol)+' · '+(x.days??"—")+'d</small></span><span class="radar-right"><b class="'+cls+'">'+Number(x.volume||0).toLocaleString()+' vol</b><small>'+ (x.volumeOiRatio!=null?esc(x.volumeOiRatio)+"× OI":"OI —") +' · score '+esc(x.unusualScore)+'</small></span></button>';
 }
-async function drawer(screen){
+async function drawer(screen,force=false){
   const d=$("drawer"),b=$("drawerContent");
   d.classList.remove("hidden");
   $("drawerTitle").textContent=screen==="radar"?"MARKET RADAR":screen.toUpperCase();
@@ -318,10 +318,10 @@ async function drawer(screen){
   }else if(screen==="volume"){
     b.innerHTML='<div class="drawer-body"><div class="radar-note">UNUSUAL OPTION VOLUME. Real Alpaca option volume ranked against open interest when available. Volume alone does not reveal whether trades were buys or sells.</div><div id="volumeBody">Loading unusual call/put volume…</div></div>';
     try{
-      const r=await api("/api/unusual-volume");
+      const r=await api("/api/unusual-volume"+(force?"?refresh=1":""));
       const calls=(r.calls||[]).map(unusualRow).join("")||'<div class="empty">No unusual call volume returned.</div>';
       const puts=(r.puts||[]).map(unusualRow).join("")||'<div class="empty">No unusual put volume returned.</div>';
-      $("volumeBody").innerHTML='<div class="radar-toolbar"><button id="refreshVolume" class="ghost">↻ REFRESH VOLUME</button></div><div class="radar-section"><h3>UNUSUAL HIGH-VOLUME CALLS</h3>'+calls+'</div><div class="radar-section"><h3>UNUSUAL HIGH-VOLUME PUTS</h3>'+puts+'</div><div class="radar-foot">Updated '+new Date(r.updatedAt).toLocaleTimeString()+' · '+esc(r.source||"Alpaca")+'</div>'; $("refreshVolume").onclick=()=>{delete window.__refreshVolume; drawer("volume")};
+      $("volumeBody").innerHTML='<div class="radar-toolbar"><button id="refreshVolume" class="ghost">↻ REFRESH VOLUME</button></div><div class="radar-section"><h3>UNUSUAL HIGH-VOLUME CALLS</h3>'+calls+'</div><div class="radar-section"><h3>UNUSUAL HIGH-VOLUME PUTS</h3>'+puts+'</div><div class="radar-foot">Updated '+new Date(r.updatedAt).toLocaleTimeString()+' · '+esc(r.source||"Alpaca")+'</div>'; $("refreshVolume").onclick=()=>drawer("volume",true);
       document.querySelectorAll("#volumeBody .radar-row").forEach(e=>e.onclick=()=>{
         const x=(r.calls||[]).concat(r.puts||[]).find(o=>o.contractSymbol===e.dataset.contract);
         openScannerOption(x);
@@ -330,14 +330,14 @@ async function drawer(screen){
   }else if(screen==="predictions"){
     b.innerHTML='<div class="drawer-body"><div class="radar-note">PREDICTIONS. Fresh 100-stock cross-industry scan using real Alpaca 90-day price history and current option-chain data. These are analytical setups, not guaranteed outcomes.</div><div id="predictionBody">Loading reversal setups…</div></div>';
     try{
-      const r=await api("/api/predictions");
+      const r=await api("/api/predictions"+(force?"?refresh=1":""));
       const card=(title,x,kind)=>{
         if(!x)return '<div class="radar-section"><h3>'+title+'</h3><div class="empty">No qualifying real Alpaca setup found in this scan.</div></div>';
         const cls=x.return30<0?"down":"up";
         return '<div class="radar-section"><h3>'+title+'</h3><button class="radar-row" data-symbol="'+esc(x.symbol)+'" data-contract="'+esc(x.contractSymbol)+'"><span><b>'+esc(x.symbol)+'</b><small>'+esc(x.name||"")+' · 90D '+(x.return90>=0?"+":"")+Number(x.return90).toFixed(2)+'%</small></span><span class="radar-right"><b class="'+cls+'">'+esc(x.contractSymbol)+'</b><small>'+esc(kind)+" · strike "+px(x.strike)+" · "+esc(x.expirationDate||"")+' · ASK '+money(x.ask)+'</small></span></button><p class="radar-help">'+esc(x.thesis||"")+'</p></div>';
       };
       $("predictionBody").innerHTML='<div class="radar-toolbar"><button id="refreshPredictions" class="ghost">↻ REFRESH PREDICTIONS</button></div>'+card("REBOUND CALL — AFTER LARGE DECLINE",r.rebound,"CALL")+card("PULLBACK PUT — AFTER LARGE ADVANCE",r.downside,"PUT")+'<div class="radar-foot">Updated '+new Date(r.updatedAt).toLocaleTimeString()+' · '+esc(r.source||"Alpaca")+'</div>';
-      $("refreshPredictions").onclick=()=>drawer("predictions");
+      $("refreshPredictions").onclick=()=>drawer("predictions",true);
       document.querySelectorAll("#predictionBody .radar-row").forEach(e=>e.onclick=()=>{
         const x=[r.rebound,r.downside].find(o=>o&&o.contractSymbol===e.dataset.contract);
         if(x)openPredictionOption(x);
