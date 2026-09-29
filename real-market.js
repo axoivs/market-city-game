@@ -778,47 +778,60 @@ async function getOutlook(days = 30) {
     .sort((a,b) => Math.abs(b.changePct) - Math.abs(a.changePct))
     .slice(0, 40);
 
+  // Alpaca's multi-symbol bars endpoint requires an explicit historical
+  // window. Without start=, a request can default to the current day.
+  // Use extra calendar days because the horizon is measured in trading days.
+  const calendarDays = Math.ceil(horizon * 1.7) + 14;
+  const startDate = new Date(Date.now() - calendarDays * 86400000).toISOString();
+  const symbols = candidates.map(x => x.symbol);
   const bars = new Map();
-  let cursor = 0;
-  const chunks = [];
-  for (let i=0;i<candidates.length;i+=RADAR_BATCH_SIZE) {
-    chunks.push(candidates.slice(i,i+RADAR_BATCH_SIZE).map(x=>x.symbol));
-  }
 
-  async function worker() {
-    while (true) {
-      const index = cursor++;
-      if (index >= chunks.length) return;
-      const batch = chunks[index];
+  if (symbols.length) {
+    let token = "";
+    do {
       try {
-        const limit = Math.min(1000, horizon + 10);
-        const data = await request(
-          DATA_HOST,
-          "/v2/stocks/bars?symbols=" + encodeURIComponent(batch.join(",")) +
-          "&timeframe=1Day&limit=" + limit +
-          "&feed=" + encodeURIComponent(STOCK_FEED) + "&adjustment=raw"
-        );
+        const q = new URLSearchParams({
+          symbols: symbols.join(","),
+          timeframe: "1Day",
+          start: startDate,
+          limit: "10000",
+          feed: STOCK_FEED,
+          adjustment: "raw",
+          sort: "asc"
+        });
+        if (token) q.set("page_token", token);
+        const data = await request(DATA_HOST, "/v2/stocks/bars?" + q.toString());
         const map = data?.bars || {};
-        for (const s of batch) if (Array.isArray(map[s])) bars.set(s,map[s]);
+        for (const s of symbols) {
+          const incoming = Array.isArray(map[s]) ? map[s] : [];
+          if (incoming.length) bars.set(s, [...(bars.get(s) || []), ...incoming]);
+        }
+        token = data?.next_page_token || "";
       } catch(e) {
-        console.error("Outlook bars", horizon, index, e.message);
+        console.error("Outlook bars", horizon, e.message);
+        token = "";
       }
-    }
+    } while (token);
   }
-  await Promise.all(Array.from({length:Math.min(RADAR_CONCURRENCY,chunks.length)},worker));
 
   const rows = [];
   for (const stock of candidates) {
-    const history = bars.get(stock.symbol) || [];
-    if (history.length < 5) continue;
+    const history = (bars.get(stock.symbol) || [])
+      .filter(x => finite(x.c) && Number(x.c) > 0)
+      .sort((a,b) => String(a.t||"").localeCompare(String(b.t||"")));
 
-    const latest = Number(history[history.length-1]?.c);
-    const oldHorizon = Number(history[Math.max(0,history.length-(horizon+1))]?.c);
-    const old30 = Number(history[Math.max(0,history.length-31)]?.c);
+    if (history.length < Math.min(5, horizon + 1)) continue;
+
+    const latest = Number(history[history.length - 1]?.c);
+    const targetIndex = Math.max(0, history.length - (horizon + 1));
+    const oldHorizon = Number(history[targetIndex]?.c);
+    const old30 = Number(history[Math.max(0, history.length - 31)]?.c);
     if (!finite(latest) || latest <= 0) continue;
 
-    const returnHorizon = finite(oldHorizon) && oldHorizon > 0 ? ((latest-oldHorizon)/oldHorizon)*100 : null;
-    const return30 = finite(old30) && old30 > 0 ? ((latest-old30)/old30)*100 : null;
+    const returnHorizon = finite(oldHorizon) && oldHorizon > 0
+      ? ((latest-oldHorizon)/oldHorizon)*100 : null;
+    const return30 = finite(old30) && old30 > 0
+      ? ((latest-old30)/old30)*100 : null;
     const direction = Number(returnHorizon ?? stock.changePct) >= 0 ? "call" : "put";
 
     let option = null;
@@ -833,31 +846,40 @@ async function getOutlook(days = 30) {
       if (exp) {
         const chain = await getOptionChain(stock.symbol,exp);
         const candidates2 = chain.chain.filter(o => {
-          if (o.type !== direction || !finite(o.strike) || !finite(o.ask) || o.ask <= 0) return false;
+          if (o.type !== direction || !finite(o.strike)) return false;
+          const observed = finite(o.ask) && o.ask > 0 ? o.ask : o.last;
+          if (!finite(observed) || observed <= 0) return false;
           const m = Math.abs(o.strike-latest)/latest;
           const d = finite(o.delta) ? Math.abs(o.delta) : 0;
           return m <= 0.08 && (!finite(o.delta) || (d >= 0.30 && d <= 0.70));
         });
-        candidates2.sort((a,b) => {
-          const av = (b.volume||0)-(a.volume||0);
-          const ai = (b.openInterest||0)-(a.openInterest||0);
-          return av || ai;
-        });
+        candidates2.sort((a,b) =>
+          ((b.volume||0)-(a.volume||0)) ||
+          ((b.openInterest||0)-(a.openInterest||0))
+        );
         option = candidates2[0] || null;
       }
     } catch(e) {
       console.error("Outlook option lookup", stock.symbol, e.message);
     }
 
-    const momentum = clamp(50 + Number(returnHorizon||0)*1.5 + Number(return30||0)*0.75,0,100);
+    const momentum = clamp(
+      50 + Number(returnHorizon||0)*1.5 + Number(return30||0)*0.75,
+      0, 100
+    );
     const liquidity = option
       ? Math.min(100,Math.log10(1+(option.volume||0))*25+Math.log10(1+(option.openInterest||0))*10)
       : 0;
     const spread = option && finite(option.bid) && option.bid > 0 && finite(option.ask)
       ? (option.ask-option.bid)/option.ask : 1;
-    const priceFit = option && option.ask > 0
-      ? Math.max(0,100-(option.ask/latest)*100*8) : 0;
-    const setupScore = round(clamp(momentum*.45+liquidity*.25+(1-Math.min(1,spread))*100*.15+priceFit*.15,0,100),1);
+    const observedOptionPrice = option
+      ? (finite(option.ask) && option.ask > 0 ? option.ask : option.last) : null;
+    const priceFit = finite(observedOptionPrice) && observedOptionPrice > 0
+      ? Math.max(0,100-(observedOptionPrice/latest)*100*8) : 0;
+    const setupScore = round(clamp(
+      momentum*.45+liquidity*.25+(1-Math.min(1,spread))*100*.15+priceFit*.15,
+      0,100
+    ),1);
 
     rows.push({
       symbol:stock.symbol,name:stock.name,price:latest,
@@ -867,9 +889,9 @@ async function getOutlook(days = 30) {
       contractSymbol:option?.contractSymbol||null,type:option?.type||direction,
       strike:option?.strike??null,expirationDate:option?.expirationDate||null,
       days:option?.days??null,ask:option?.ask??null,bid:option?.bid??null,
-      delta:option?.delta??null,volume:option?.volume??null,
+      last:option?.last??null,delta:option?.delta??null,volume:option?.volume??null,
       openInterest:option?.openInterest??null,
-      premiumPct:option&&option.ask>0?round((option.ask/latest)*100,2):null,
+      premiumPct:finite(observedOptionPrice)?round((observedOptionPrice/latest)*100,2):null,
       setupScore,real:true
     });
   }
@@ -888,29 +910,60 @@ async function getOutlook(days = 30) {
 
 async function getUnusualOptionVolume() {
   if(volumeCache.data&&Date.now()-volumeCache.at<120000)return volumeCache.data;
-  const radar=await getRadar();
-  const symbols=[...(radar.up||[]),...(radar.down||[])].filter((x,i,a)=>a.findIndex(y=>y.symbol===x.symbol)===i).slice(0,30).map(x=>x.symbol);
+
+  // Scan a real Alpaca universe of stocks with options. Do not depend only
+  // on the Radar's current top movers, because that can hide high-volume
+  // option activity in otherwise ordinary stock moves.
+  const assets = await getAssets();
+  const symbols = assets
+    .filter(x => x.hasOptions)
+    .map(x => x.symbol)
+    .slice(0, 100);
+
   const rows=[];
-  for(const symbol of symbols){
-    try{
-      const exps=await getExpirations(symbol);
-      const exp=exps.find(d=>{const days=(Date.parse(d+"T23:59:59-04:00")-Date.now())/86400000;return days>=7&&days<=60;})||exps[0];
-      if(!exp)continue;
-      const chain=await getOptionChain(symbol,exp);
-      for(const o of chain.chain){
-        if(!finite(o.volume)||o.volume<=0)continue;
-        const oi=finite(o.openInterest)&&o.openInterest>0?o.openInterest:null;
-        const ratio=oi?o.volume/oi:o.volume;
-        const notional=finite(o.ask)&&o.ask>0?o.ask*(o.size||100)*o.volume:0;
-        rows.push({symbol,contractSymbol:o.contractSymbol,type:o.type,strike:o.strike,expirationDate:o.expirationDate,days:o.days,
-          volume:o.volume,openInterest:o.openInterest,volumeOiRatio:oi?round(ratio,2):null,ask:o.ask,bid:o.bid,
-          delta:o.delta,notional:round(notional),unusualScore:round(Math.min(100,Math.log10(1+o.volume)*20+(oi?Math.min(50,ratio*20):10)),1),real:true});
-      }
-    }catch(e){console.error("Unusual option volume",symbol,e.message);}
+  let cursor=0;
+  async function worker(){
+    while(true){
+      const symbol=symbols[cursor++];
+      if(!symbol)return;
+      try{
+        const exps=await getExpirations(symbol);
+        const exp=exps.find(d=>{
+          const days=(Date.parse(d+"T23:59:59-04:00")-Date.now())/86400000;
+          return days>=7&&days<=60;
+        })||exps[0];
+        if(!exp)continue;
+        const chain=await getOptionChain(symbol,exp);
+        for(const o of chain.chain){
+          if(!finite(o.volume)||o.volume<=0)continue;
+          const oi=finite(o.openInterest)&&o.openInterest>0?o.openInterest:null;
+          const ratio=oi?o.volume/oi:o.volume;
+          const observed=finite(o.ask)&&o.ask>0?o.ask:o.last;
+          const notional=finite(observed)&&observed>0?observed*(o.size||100)*o.volume:0;
+          rows.push({
+            symbol,contractSymbol:o.contractSymbol,type:o.type,strike:o.strike,
+            expirationDate:o.expirationDate,days:o.days,volume:o.volume,
+            openInterest:o.openInterest,volumeOiRatio:oi?round(ratio,2):null,
+            ask:o.ask,bid:o.bid,last:o.last,delta:o.delta,notional:round(notional),
+            unusualScore:round(Math.min(100,
+              Math.log10(1+o.volume)*20+(oi?Math.min(50,ratio*20):10)
+            ),1),
+            real:true
+          });
+        }
+      }catch(e){console.error("Unusual option volume",symbol,e.message);}
+    }
   }
-  const calls=rows.filter(x=>x.type==="call").sort((a,b)=>b.unusualScore-a.unusualScore||b.volume-a.volume).slice(0,20);
-  const puts=rows.filter(x=>x.type==="put").sort((a,b)=>b.unusualScore-a.unusualScore||b.volume-a.volume).slice(0,20);
-  const result={updatedAt:Date.now(),source:"Alpaca",calls,puts,methodology:"Ranks real Alpaca option volume using volume, volume/open-interest when available, and observed notional. It does not infer whether trades were buys or sells."};
+  await Promise.all(Array.from({length:4},worker));
+
+  const calls=rows.filter(x=>x.type==="call")
+    .sort((a,b)=>b.unusualScore-a.unusualScore||b.volume-a.volume).slice(0,20);
+  const puts=rows.filter(x=>x.type==="put")
+    .sort((a,b)=>b.unusualScore-a.unusualScore||b.volume-a.volume).slice(0,20);
+  const result={
+    updatedAt:Date.now(),source:"Alpaca",calls,puts,
+    methodology:"Ranks real Alpaca option volume using volume, volume/open-interest when available, and observed notional. It does not infer whether trades were buys or sells."
+  };
   volumeCache.data=result;volumeCache.at=Date.now();return result;
 }
 
