@@ -129,7 +129,7 @@ function outlookRow(x,period){
   const ret=x.returnPeriod;
   const cls=ret>0?"up":ret<0?"down":"flat";
   const price=x.ask!=null?x.ask:null;
-  return '<button class="radar-row" data-symbol="'+esc(x.symbol)+'"><span><b>'+esc(x.symbol)+'</b><small>'+esc(x.name||"")+' · '+period+'D '+(ret>=0?"+":"")+Number(ret||0).toFixed(2)+'%</small></span><span class="radar-right"><b class="'+cls+'">'+(x.contractSymbol?esc(x.contractSymbol):"No option")+'</b><small>'+ (price!=null?money(price)+" · ":"") +'score '+(x.setupScore??"—")+'</small></span></button>';
+  return '<button class="radar-row" data-symbol="'+esc(x.symbol)+'" data-contract="'+esc(x.contractSymbol)+'"><span><b>'+esc(x.symbol)+'</b><small>'+esc(x.name||"")+' · '+period+'D '+(ret>=0?"+":"")+Number(ret||0).toFixed(2)+'%</small></span><span class="radar-right"><b class="'+cls+'">'+(x.contractSymbol?esc(x.contractSymbol):"No option")+'</b><small>'+ (price!=null?money(price)+" · ":"") +'score '+(x.setupScore??"—")+'</small></span></button>';
 }
 async function loadOutlook(days,force=false){
   const body=$("outlookBody");
@@ -144,9 +144,43 @@ async function loadOutlook(days,force=false){
     body.innerHTML='<div class="empty">'+esc(e.message)+'</div>';
   }
 }
+async function openScannerOption(x){
+  if(!x?.symbol||!x?.contractSymbol)return;
+  try{
+    // Add the exact contract, not merely the underlying stock.
+    const existing=optionWatchlist().find(o=>o.contractSymbol===x.contractSymbol);
+    if(!existing){
+      optionWatchlist().push({
+        contractSymbol:x.contractSymbol,symbol:x.symbol,type:x.type,strike:x.strike,
+        expirationDate:x.expirationDate,ask:x.ask,bid:x.bid,last:x.last
+      });
+      saveOptionWatchlist();
+    }
+    state.selectedContract=null;
+    await selectSymbol(x.symbol);
+    state.expiration=x.expirationDate||"";
+    if(state.expiration){
+      const e=$("expirationDates");
+      if(e)e.value=state.expiration;
+      await loadChain();
+    }
+    state.selectedContract=state.options.find(o=>o.contractSymbol===x.contractSymbol)||{
+      contractSymbol:x.contractSymbol,symbol:x.symbol,type:x.type,strike:x.strike,
+      expirationDate:x.expirationDate,ask:x.ask,bid:x.bid,last:x.last
+    };
+    document.querySelectorAll(".ticket-tabs button").forEach(b=>b.classList.toggle("active",b.dataset.tab==="option"));
+    $("stockTicket").hidden=true;
+    $("optionTicket").hidden=false;
+    renderWatchlist();
+    renderChain();
+    renderOptionTicket();
+    document.querySelectorAll(".watch-row").forEach(r=>r.classList.toggle("active",r.querySelector("[data-option]")?.dataset.option===x.contractSymbol));
+    $("drawer").classList.add("hidden");
+  }catch(e){toast(e.message)}
+}
 function unusualRow(x){
   const cls=x.type==="call"?"up":"down";
-  return '<button class="radar-row" data-symbol="'+esc(x.symbol)+'"><span><b>'+esc(x.symbol)+' · '+esc(x.type.toUpperCase())+'</b><small>'+esc(x.contractSymbol)+' · '+(x.days??"—")+'d</small></span><span class="radar-right"><b class="'+cls+'">'+Number(x.volume||0).toLocaleString()+' vol</b><small>'+ (x.volumeOiRatio!=null?esc(x.volumeOiRatio)+"× OI":"OI —") +' · score '+esc(x.unusualScore)+'</small></span></button>';
+  return '<button class="radar-row" data-symbol="'+esc(x.symbol)+'" data-contract="'+esc(x.contractSymbol)+'" data-option-type="'+esc(x.type)+'"><span><b>'+esc(x.symbol)+' · '+esc(x.type.toUpperCase())+'</b><small>'+esc(x.contractSymbol)+' · '+(x.days??"—")+'d</small></span><span class="radar-right"><b class="'+cls+'">'+Number(x.volume||0).toLocaleString()+' vol</b><small>'+ (x.volumeOiRatio!=null?esc(x.volumeOiRatio)+"× OI":"OI —") +' · score '+esc(x.unusualScore)+'</small></span></button>';
 }
 async function drawer(screen){
   const d=$("drawer"),b=$("drawerContent");
@@ -173,7 +207,10 @@ async function drawer(screen){
       const calls=(r.calls||[]).map(unusualRow).join("")||'<div class="empty">No unusual call volume returned.</div>';
       const puts=(r.puts||[]).map(unusualRow).join("")||'<div class="empty">No unusual put volume returned.</div>';
       $("volumeBody").innerHTML='<div class="radar-toolbar"><button id="refreshVolume" class="ghost">↻ REFRESH VOLUME</button></div><div class="radar-section"><h3>UNUSUAL HIGH-VOLUME CALLS</h3>'+calls+'</div><div class="radar-section"><h3>UNUSUAL HIGH-VOLUME PUTS</h3>'+puts+'</div><div class="radar-foot">Updated '+new Date(r.updatedAt).toLocaleTimeString()+' · '+esc(r.source||"Alpaca")+'</div>'; $("refreshVolume").onclick=()=>{delete window.__refreshVolume; drawer("volume")};
-      document.querySelectorAll("#volumeBody .radar-row").forEach(e=>e.onclick=()=>{selectSymbol(e.dataset.symbol);d.classList.add("hidden")});
+      document.querySelectorAll("#volumeBody .radar-row").forEach(e=>e.onclick=()=>{
+        const x=(r.calls||[]).concat(r.puts||[]).find(o=>o.contractSymbol===e.dataset.contract);
+        openScannerOption(x);
+      });
     }catch(e){$("volumeBody").innerHTML='<div class="empty">'+esc(e.message)+'</div>'}
   }else if(screen==="predictions"){
     b.innerHTML='<div class="drawer-body"><div class="radar-note">PREDICTIONS. Fresh 100-stock cross-industry scan using real Alpaca 90-day price history and current option-chain data. These are analytical setups, not guaranteed outcomes.</div><div id="predictionBody">Loading reversal setups…</div></div>';
@@ -186,7 +223,10 @@ async function drawer(screen){
       };
       $("predictionBody").innerHTML='<div class="radar-toolbar"><button id="refreshPredictions" class="ghost">↻ REFRESH PREDICTIONS</button></div>'+card("REBOUND CALL — AFTER LARGE DECLINE",r.rebound,"CALL")+card("PULLBACK PUT — AFTER LARGE ADVANCE",r.downside,"PUT")+'<div class="radar-foot">Updated '+new Date(r.updatedAt).toLocaleTimeString()+' · '+esc(r.source||"Alpaca")+'</div>';
       $("refreshPredictions").onclick=()=>drawer("predictions");
-      document.querySelectorAll("#predictionBody .radar-row").forEach(e=>e.onclick=()=>{selectSymbol(e.dataset.symbol);d.classList.add("hidden")});
+      document.querySelectorAll("#predictionBody .radar-row").forEach(e=>e.onclick=()=>{
+        const x=[r.rebound,r.downside].find(o=>o&&o.contractSymbol===e.dataset.contract);
+        openScannerOption(x);
+      });
     }catch(e){$("predictionBody").innerHTML='<div class="empty">'+esc(e.message)+'</div>'}
   }else{
     b.innerHTML='<div class="drawer-body">'+(state.leaderboard||[]).map((x,i)=>'<div class="holding"><span>#'+(i+1)+" "+esc(x.name)+" · Level "+x.level+'</span><b>'+money(x.value)+'</b></div>').join("")+'</div>';
