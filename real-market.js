@@ -827,143 +827,149 @@ async function getOutlook(days = 30, options = {}) {
   const cached = getOutlook.cache.get(horizon);
   if (!options.refresh && cached && Date.now() - cached.at < 120000) return cached.data;
 
-  const radar = await getRadar({refresh:true});
-  const allCandidates = (radar.stocks || [])
-    .filter(x => x.hasOptions && finite(x.price) && x.price > 0 && finite(x.changePct));
-  const candidates = randomIndustrySample(allCandidates, Math.min(100, allCandidates.length));
+  // Do not depend on Radar's 100-stock sample for long horizons. Long
+  // horizons need a fresh universe and enough historical bars for every
+  // candidate, otherwise 180/365-day scans can return an empty list.
+  const allAssets = await getAssets();
+  const optionable = allAssets.filter(x => x.hasOptions);
+  const candidates = randomIndustrySample(optionable, Math.min(100, optionable.length));
 
-  // Alpaca's multi-symbol bars endpoint requires an explicit historical
-  // window. Without start=, a request can default to the current day.
-  // Use extra calendar days because the horizon is measured in trading days.
-  const calendarDays = Math.ceil(horizon * 1.7) + 14;
+  // Request the historical window in small multi-symbol batches. This avoids
+  // large 180/365-day responses timing out or exhausting the per-response
+  // Alpaca bar limit.
+  const calendarDays = Math.ceil(horizon * 1.7) + 30;
   const startDate = new Date(Date.now() - calendarDays * 86400000).toISOString();
-  const symbols = candidates.map(x => x.symbol);
   const bars = new Map();
+  const BAR_BATCH = 20;
+  const barChunks = [];
+  for (let i=0;i<candidates.length;i+=BAR_BATCH) barChunks.push(candidates.slice(i,i+BAR_BATCH));
 
-  if (symbols.length) {
-    let token = "";
-    do {
-      try {
-        const q = new URLSearchParams({
-          symbols: symbols.join(","),
-          timeframe: "1Day",
-          start: startDate,
-          limit: "10000",
-          feed: STOCK_FEED,
-          adjustment: "raw",
-          sort: "asc"
-        });
-        if (token) q.set("page_token", token);
-        const data = await request(DATA_HOST, "/v2/stocks/bars?" + q.toString());
-        const map = data?.bars || {};
-        for (const s of symbols) {
-          const incoming = Array.isArray(map[s]) ? map[s] : [];
-          if (incoming.length) bars.set(s, [...(bars.get(s) || []), ...incoming]);
-        }
-        token = data?.next_page_token || "";
-      } catch(e) {
-        console.error("Outlook bars", horizon, e.message);
-        token = "";
+  let barCursor=0;
+  async function barWorker(){
+    while(true){
+      const batch=barChunks[barCursor++];
+      if(!batch)return;
+      const symbols=batch.map(x=>x.symbol);
+      try{
+        let token="";
+        do{
+          const q=new URLSearchParams({
+            symbols:symbols.join(","),
+            timeframe:"1Day",
+            start:startDate,
+            limit:"10000",
+            feed:STOCK_FEED,
+            adjustment:"raw",
+            sort:"asc"
+          });
+          if(token)q.set("page_token",token);
+          const data=await request(DATA_HOST,"/v2/stocks/bars?"+q.toString());
+          const map=data?.bars||{};
+          for(const s of symbols){
+            const incoming=Array.isArray(map[s])?map[s]:[];
+            if(incoming.length)bars.set(s,[...(bars.get(s)||[]),...incoming]);
+          }
+          token=data?.next_page_token||"";
+        }while(token);
+      }catch(e){
+        console.error("Outlook bars",horizon,batch.map(x=>x.symbol).join(","),e.message);
       }
-    } while (token);
-  }
-
-  const rows = [];
-  let optionCursor = 0;
-  async function optionWorker() {
-    while (true) {
-      const stock = candidates[optionCursor++];
-      if (!stock) return;
-    const history = (bars.get(stock.symbol) || [])
-      .filter(x => finite(x.c) && Number(x.c) > 0)
-      .sort((a,b) => String(a.t||"").localeCompare(String(b.t||"")));
-
-    if (history.length < Math.min(5, horizon + 1)) continue;
-
-    const latest = Number(history[history.length - 1]?.c);
-    const targetIndex = Math.max(0, history.length - (horizon + 1));
-    const oldHorizon = Number(history[targetIndex]?.c);
-    const old30 = Number(history[Math.max(0, history.length - 31)]?.c);
-    if (!finite(latest) || latest <= 0) continue;
-
-    const returnHorizon = finite(oldHorizon) && oldHorizon > 0
-      ? ((latest-oldHorizon)/oldHorizon)*100 : null;
-    const return30 = finite(old30) && old30 > 0
-      ? ((latest-old30)/old30)*100 : null;
-    const direction = Number(returnHorizon ?? stock.changePct) >= 0 ? "call" : "put";
-
-    let option = null;
-    try {
-      const exps = await getExpirations(stock.symbol);
-      const targetDays = Math.max(21, Math.min(90, Math.round(horizon * 0.25)));
-      const exp = exps.find(d => {
-        const daysToExp = (Date.parse(d+"T23:59:59-04:00")-Date.now())/86400000;
-        return daysToExp >= targetDays && daysToExp <= Math.max(targetDays + 30, 45);
-      }) || exps[0];
-
-      if (exp) {
-        const chain = await getOptionChain(stock.symbol,exp);
-        const candidates2 = chain.chain.filter(o => {
-          if (o.type !== direction || !finite(o.strike)) return false;
-          const observed = finite(o.ask) && o.ask > 0 ? o.ask : o.last;
-          if (!finite(observed) || observed <= 0) return false;
-          const m = Math.abs(o.strike-latest)/latest;
-          const d = finite(o.delta) ? Math.abs(o.delta) : 0;
-          return m <= 0.08 && (!finite(o.delta) || (d >= 0.30 && d <= 0.70));
-        });
-        candidates2.sort((a,b) =>
-          ((b.volume||0)-(a.volume||0)) ||
-          ((b.openInterest||0)-(a.openInterest||0))
-        );
-        option = candidates2[0] || null;
-      }
-    } catch(e) {
-      console.error("Outlook option lookup", stock.symbol, e.message);
     }
+  }
+  await Promise.all(Array.from({length:Math.min(4,barChunks.length)},barWorker));
 
-    const momentum = clamp(
-      50 + Number(returnHorizon||0)*1.5 + Number(return30||0)*0.75,
-      0, 100
-    );
-    const liquidity = option
-      ? Math.min(100,Math.log10(1+(option.volume||0))*25+Math.log10(1+(option.openInterest||0))*10)
-      : 0;
-    const spread = option && finite(option.bid) && option.bid > 0 && finite(option.ask)
-      ? (option.ask-option.bid)/option.ask : 1;
-    const observedOptionPrice = option
-      ? (finite(option.ask) && option.ask > 0 ? option.ask : option.last) : null;
-    const priceFit = finite(observedOptionPrice) && observedOptionPrice > 0
-      ? Math.max(0,100-(observedOptionPrice/latest)*100*8) : 0;
-    const setupScore = round(clamp(
-      momentum*.45+liquidity*.25+(1-Math.min(1,spread))*100*.15+priceFit*.15,
-      0,100
-    ),1);
+  // Keep only symbols with enough real daily observations for the requested
+  // horizon. For 180/365 days, this is what prevents incomplete histories
+  // from silently producing misleading calculations.
+  const qualified=candidates.map(stock=>{
+    const history=(bars.get(stock.symbol)||[])
+      .filter(x=>finite(x.c)&&Number(x.c)>0)
+      .sort((a,b)=>String(a.t||"").localeCompare(String(b.t||"")));
+    return {stock,history};
+  }).filter(x=>x.history.length>=Math.max(20,Math.min(horizon+1, Math.floor(horizon*0.60))));
+
+  const rows=[];
+  let optionCursor=0;
+  async function optionWorker(){
+    while(true){
+      const item=qualified[optionCursor++];
+      if(!item)return;
+      const {stock,history}=item;
+      const closes=history.map(x=>Number(x.c));
+      const latest=closes.at(-1);
+      const targetIndex=Math.max(0,closes.length-(horizon+1));
+      const oldHorizon=closes[targetIndex];
+      const old30=closes[Math.max(0,closes.length-31)];
+      if(!finite(latest)||latest<=0||!finite(oldHorizon)||oldHorizon<=0)continue;
+
+      const returnHorizon=((latest-oldHorizon)/oldHorizon)*100;
+      const return30=finite(old30)&&old30>0?((latest-old30)/old30)*100:null;
+      const direction=returnHorizon>=0?"call":"put";
+
+      let option=null;
+      try{
+        const exps=await getExpirations(stock.symbol);
+        // Keep the option expiration appropriate to the analysis horizon.
+        // For 180/365-day outlooks, prefer longer-dated contracts instead of
+        // always falling back to a short 90-day option.
+        const targetDays=Math.max(30,Math.min(270,Math.round(horizon*0.25)));
+        const exp=exps.find(d=>{
+          const dte=(Date.parse(d+"T23:59:59-04:00")-Date.now())/86400000;
+          return dte>=targetDays&&dte<=targetDays+60;
+        })||exps.find(d=>(Date.parse(d+"T23:59:59-04:00")-Date.now())/86400000>=21)||exps[0];
+
+        if(exp){
+          const chain=await getOptionChain(stock.symbol,exp);
+          const opts=chain.chain.filter(o=>{
+            if(o.type!==direction||!finite(o.strike))return false;
+            const observed=finite(o.ask)&&o.ask>0?o.ask:o.last;
+            if(!finite(observed)||observed<=0)return false;
+            const m=Math.abs(o.strike-latest)/latest;
+            const d=finite(o.delta)?Math.abs(o.delta):null;
+            return m<=0.10&&(d===null||(d>=0.25&&d<=0.75));
+          });
+          opts.sort((a,b)=>{
+            const ad=finite(a.delta)?Math.abs(a.delta):0,bd=finite(b.delta)?Math.abs(b.delta):0;
+            const av=(a.volume||0)+(a.openInterest||0),bv=(b.volume||0)+(b.openInterest||0);
+            return ((Math.abs(ad-.50)-Math.abs(bd-.50)))||(bv-av);
+          });
+          option=opts[0]||null;
+        }
+      }catch(e){
+        console.error("Outlook option lookup",stock.symbol,e.message);
+      }
+
+      const momentum=clamp(50+returnHorizon*1.5+Number(return30||0)*.75,0,100);
+      const liquidity=option?Math.min(100,Math.log10(1+(option.volume||0))*25+Math.log10(1+(option.openInterest||0))*10):0;
+      const spread=option&&finite(option.bid)&&option.bid>0&&finite(option.ask)?(option.ask-option.bid)/option.ask:1;
+      const observed=option?(finite(option.ask)&&option.ask>0?option.ask:option.last):null;
+      const priceFit=finite(observed)&&observed>0?Math.max(0,100-(observed/latest)*100*8):0;
+      const setupScore=round(clamp(momentum*.45+liquidity*.25+(1-Math.min(1,spread))*100*.15+priceFit*.15,0,100),1);
 
       rows.push({
         symbol:stock.symbol,name:stock.name,price:latest,
-      returnPeriod:finite(returnHorizon)?round(returnHorizon,2):null,
-      return30:finite(return30)?round(return30,2):null,
-      direction:direction.toUpperCase(),trend:stock.trend,
-      contractSymbol:option?.contractSymbol||null,type:option?.type||direction,
-      strike:option?.strike??null,expirationDate:option?.expirationDate||null,
-      days:option?.days??null,ask:option?.ask??null,bid:option?.bid??null,
-      last:option?.last??null,delta:option?.delta??null,volume:option?.volume??null,
-      openInterest:option?.openInterest??null,
-      premiumPct:finite(observedOptionPrice)?round((observedOptionPrice/latest)*100,2):null,
-      setupScore,real:true
+        returnPeriod:round(returnHorizon,2),return30:finite(return30)?round(return30,2):null,
+        direction:direction.toUpperCase(),trend:returnHorizon>=0?"UP":"DOWN",
+        contractSymbol:option?.contractSymbol||null,type:option?.type||direction,
+        strike:option?.strike??null,expirationDate:option?.expirationDate||null,
+        days:option?.days??null,ask:option?.ask??null,bid:option?.bid??null,
+        last:option?.last??null,delta:option?.delta??null,volume:option?.volume??null,
+        openInterest:option?.openInterest??null,
+        premiumPct:finite(observed)?round((observed/latest)*100,2):null,
+        setupScore,historyDays:history.length,real:true
       });
     }
   }
 
-  await Promise.all(Array.from({length:Math.min(3,candidates.length)}, optionWorker));
-
+  await Promise.all(Array.from({length:Math.min(4,qualified.length)},optionWorker));
   rows.sort((a,b)=>b.setupScore-a.setupScore);
-  const result = {
-    updatedAt:Date.now(),
-    periodDays:horizon,
-    source:"Alpaca",
+
+  const result={
+    updatedAt:Date.now(),periodDays:horizon,source:"Alpaca",
     stocks:rows.slice(0,20),
-    methodology:horizon+"-day real price history plus 30-day momentum, current real option liquidity, spread, delta and premium-to-stock-price fit. This is a game analytics score, not a guaranteed return prediction."
+    scannedStocks:candidates.length,
+    qualifiedStocks:qualified.length,
+    methodology:horizon+"-day real Alpaca daily price history plus current real option pricing, liquidity, spread, delta and premium fit. Long horizons use larger historical windows and longer-dated option expirations. This is a game analytics score, not a guaranteed return prediction."
   };
   getOutlook.cache.set(horizon,{data:result,at:Date.now()});
   return result;
