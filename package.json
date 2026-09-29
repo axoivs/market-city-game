@@ -6,7 +6,8 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check server.js && node --check public/game.js"
+    "check": "node --check server.js && node --check public/game.js",
+    "reset-admin": "node server.js --reset-admin"
   },
   "dependencies": {
     "ws": "^8.18.3",
