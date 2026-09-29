@@ -186,6 +186,40 @@ async function loadOutlook(days,force=false){
     body.innerHTML='<div class="empty">'+esc(e.message)+'</div>';
   }
 }
+async function openPredictionOption(x){
+  if(!x?.symbol||!x?.contractSymbol)return;
+  try{
+    const existing=optionWatchlist().find(o=>o.contractSymbol===x.contractSymbol);
+    if(!existing){
+      optionWatchlist().push({
+        contractSymbol:x.contractSymbol,symbol:x.symbol,type:x.type,strike:x.strike,
+        expirationDate:x.expirationDate,ask:x.ask,bid:x.bid,last:x.last
+      });
+      saveOptionWatchlist();
+    }
+    state.selectedContract=null;
+    await selectSymbol(x.symbol);
+    state.expiration=x.expirationDate||"";
+    if(state.expiration){
+      const e=$("expirationDates");
+      if(e)e.value=state.expiration;
+      await loadChain();
+    }
+    state.selectedContract=state.options.find(o=>o.contractSymbol===x.contractSymbol)||{
+      contractSymbol:x.contractSymbol,symbol:x.symbol,type:x.type,strike:x.strike,
+      expirationDate:x.expirationDate,ask:x.ask,bid:x.bid,last:x.last
+    };
+    document.querySelectorAll(".ticket-tabs button").forEach(b=>b.classList.toggle("active",b.dataset.tab==="option"));
+    $("stockTicket").hidden=true;
+    $("optionTicket").hidden=false;
+    renderWatchlist();
+    renderChain();
+    renderOptionTicket();
+    document.querySelectorAll(".watch-row").forEach(r=>r.classList.toggle("active",r.querySelector("[data-option]")?.dataset.option===x.contractSymbol));
+    $("drawer").classList.add("hidden");
+    toast(x.contractSymbol+" added to Options Market Watch. Review the live ASK and choose BUY OPTION.");
+  }catch(e){toast(e.message)}
+}
 async function openScannerOption(x){
   if(!x?.symbol||!x?.contractSymbol)return;
   try{
@@ -300,13 +334,13 @@ async function drawer(screen){
       const card=(title,x,kind)=>{
         if(!x)return '<div class="radar-section"><h3>'+title+'</h3><div class="empty">No qualifying real Alpaca setup found in this scan.</div></div>';
         const cls=x.return30<0?"down":"up";
-        return '<div class="radar-section"><h3>'+title+'</h3><button class="radar-row" data-symbol="'+esc(x.symbol)+'"><span><b>'+esc(x.symbol)+'</b><small>'+esc(x.name||"")+' · 90D '+(x.return90>=0?"+":"")+Number(x.return90).toFixed(2)+'%</small></span><span class="radar-right"><b class="'+cls+'">'+esc(x.contractSymbol)+'</b><small>'+esc(kind)+" · strike "+px(x.strike)+" · "+esc(x.expirationDate||"")+'</small></span></button><p class="radar-help">'+esc(x.thesis||"")+'</p></div>';
+        return '<div class="radar-section"><h3>'+title+'</h3><button class="radar-row" data-symbol="'+esc(x.symbol)+'" data-contract="'+esc(x.contractSymbol)+'"><span><b>'+esc(x.symbol)+'</b><small>'+esc(x.name||"")+' · 90D '+(x.return90>=0?"+":"")+Number(x.return90).toFixed(2)+'%</small></span><span class="radar-right"><b class="'+cls+'">'+esc(x.contractSymbol)+'</b><small>'+esc(kind)+" · strike "+px(x.strike)+" · "+esc(x.expirationDate||"")+' · ASK '+money(x.ask)+'</small></span></button><p class="radar-help">'+esc(x.thesis||"")+'</p></div>';
       };
       $("predictionBody").innerHTML='<div class="radar-toolbar"><button id="refreshPredictions" class="ghost">↻ REFRESH PREDICTIONS</button></div>'+card("REBOUND CALL — AFTER LARGE DECLINE",r.rebound,"CALL")+card("PULLBACK PUT — AFTER LARGE ADVANCE",r.downside,"PUT")+'<div class="radar-foot">Updated '+new Date(r.updatedAt).toLocaleTimeString()+' · '+esc(r.source||"Alpaca")+'</div>';
       $("refreshPredictions").onclick=()=>drawer("predictions");
       document.querySelectorAll("#predictionBody .radar-row").forEach(e=>e.onclick=()=>{
         const x=[r.rebound,r.downside].find(o=>o&&o.contractSymbol===e.dataset.contract);
-        openScannerOption(x);
+        if(x)openPredictionOption(x);
       });
     }catch(e){$("predictionBody").innerHTML='<div class="empty">'+esc(e.message)+'</div>'}
   }else{
