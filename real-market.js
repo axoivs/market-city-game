@@ -1100,4 +1100,96 @@ function clearRadarCache(){ radarCache.data=null; radarCache.at=0; }
 function clearOutlookCache(days){ if(getOutlook.cache) { if(days) getOutlook.cache.delete(Number(days)); else getOutlook.cache.clear(); } }
 function clearUnusualVolumeCache(){ volumeCache.data=null; volumeCache.at=0; }
 
-module.exports = { refreshMarket, start, getOptionChain, getExpirations, getNews, publicStock, getOptionLive, getAssets, getStockQuote, getRadar, clearRadarCache, getOutlook, clearOutlookCache, getUnusualOptionVolume, clearUnusualVolumeCache };
+async function getPredictions(options = {}) {
+  if (!options.refresh && getPredictions.cache && Date.now()-getPredictions.cache.at < 120000) return getPredictions.cache.data;
+
+  const radar = await getRadar({refresh:true});
+  const stocks = (radar.stocks||[]).filter(x=>x.hasOptions && finite(x.price) && x.price>0);
+  const symbols = stocks.map(x=>x.symbol);
+  const startDate = new Date(Date.now()-45*86400000).toISOString();
+  const bars = new Map();
+
+  if (symbols.length) {
+    let token="";
+    do {
+      const q = new URLSearchParams({
+        symbols:symbols.join(","),
+        timeframe:"1Day",
+        start:startDate,
+        limit:"10000",
+        feed:STOCK_FEED,
+        adjustment:"raw",
+        sort:"asc"
+      });
+      if(token) q.set("page_token",token);
+      try {
+        const data=await request(DATA_HOST,"/v2/stocks/bars?"+q.toString());
+        for(const s of symbols){
+          const incoming=Array.isArray(data?.bars?.[s])?data.bars[s]:[];
+          if(incoming.length) bars.set(s,[...(bars.get(s)||[]),...incoming]);
+        }
+        token=data?.next_page_token||"";
+      } catch(e) { console.error("Prediction history",e.message); token=""; }
+    } while(token);
+  }
+
+  const scored=stocks.map(stock=>{
+    const history=(bars.get(stock.symbol)||[]).filter(x=>finite(x.c)&&Number(x.c)>0).sort((a,b)=>String(a.t).localeCompare(String(b.t)));
+    const latest=Number(history.at(-1)?.c||stock.price);
+    const old=Number(history[Math.max(0,history.length-31)]?.c);
+    const return30=finite(old)&&old>0?((latest-old)/old)*100:null;
+    return {...stock,price:latest,return30};
+  }).filter(x=>finite(x.return30));
+
+  const beaten=shuffleArray(scored.filter(x=>x.return30<0).sort((a,b)=>a.return30-b.return30)).slice(0,8);
+  const extended=shuffleArray(scored.filter(x=>x.return30>0).sort((a,b)=>b.return30-a.return30)).slice(0,8);
+
+  async function choose(stock,type){
+    try {
+      const exps=await getExpirations(stock.symbol);
+      const exp=exps.find(d=>{
+        const days=(Date.parse(d+"T23:59:59-04:00")-Date.now())/86400000;
+        return days>=21&&days<=60;
+      })||exps[0];
+      if(!exp)return null;
+      const chain=await getOptionChain(stock.symbol,exp);
+      const opts=chain.chain.filter(o=>{
+        if(o.type!==type||!finite(o.strike))return false;
+        const observed=finite(o.ask)&&o.ask>0?o.ask:o.last;
+        if(!finite(observed)||observed<=0)return false;
+        const m=Math.abs(o.strike-stock.price)/stock.price;
+        return m<=0.10;
+      });
+      opts.sort((a,b)=>{
+        const ad=finite(a.delta)?Math.abs(a.delta):0;
+        const bd=finite(b.delta)?Math.abs(b.delta):0;
+        const av=(a.volume||0)+(a.openInterest||0);
+        const bv=(b.volume||0)+(b.openInterest||0);
+        return (bd>=.30&&bd<=.70)-(ad>=.30&&ad<=.70) || bv-av;
+      });
+      const o=opts[0];
+      if(!o)return null;
+      const observed=finite(o.ask)&&o.ask>0?o.ask:o.last;
+      return {
+        symbol:stock.symbol,name:stock.name,stockPrice:stock.price,return30:round(stock.return30,2),
+        direction:type,contractSymbol:o.contractSymbol,strike:o.strike,expirationDate:o.expirationDate,
+        ask:o.ask,bid:o.bid,last:o.last,volume:o.volume,openInterest:o.openInterest,delta:o.delta,
+        thesis:type==="call"?"30-day decline; rebound setup based on real price history and current option liquidity.":"30-day advance; pullback setup based on real price history and current option liquidity.",
+        real:true
+      };
+    } catch(e) { console.error("Prediction option",stock.symbol,e.message); return null; }
+  }
+
+  let rebound=null,downside=null;
+  for(const stock of beaten){ rebound=await choose(stock,"call"); if(rebound) break; }
+  for(const stock of extended){ downside=await choose(stock,"put"); if(downside) break; }
+
+  const result={updatedAt:Date.now(),source:"Alpaca",rebound,downside,
+    methodology:"Two analytical candidates from a fresh 100-stock cross-industry Alpaca scan. Rebound selects a real call candidate after a large 30-day decline; downside selects a real put candidate after a large 30-day advance. This is an analytical signal, not a guaranteed prediction or return."};
+  getPredictions.cache={at:Date.now(),data:result};
+  return result;
+}
+
+function clearPredictionsCache(){ getPredictions.cache=null; }
+
+module.exports = { refreshMarket, start, getOptionChain, getExpirations, getNews, publicStock, getOptionLive, getAssets, getStockQuote, getRadar, clearRadarCache, getOutlook, clearOutlookCache, getUnusualOptionVolume, clearUnusualVolumeCache, getPredictions, clearPredictionsCache };
