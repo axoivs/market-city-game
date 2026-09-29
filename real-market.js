@@ -44,23 +44,43 @@ async function getAssets(search = "") {
   return q ? assetCache.items.filter(a => a.symbol.toLowerCase().includes(q) || a.name.toLowerCase().includes(q)) : assetCache.items;
 }
 
+function marketDateKey(value) {
+  return new Intl.DateTimeFormat("en-CA", {
+    timeZone: "America/New_York",
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit"
+  }).format(new Date(value));
+}
+
+function previousTradingDayBars(bars, count = 5) {
+  const today = marketDateKey(Date.now());
+  return (Array.isArray(bars) ? bars : [])
+    .filter(x => Number.isFinite(Number(x.c)) && x.t && marketDateKey(x.t) < today)
+    .sort((a,b) => String(a.t).localeCompare(String(b.t)))
+    .slice(-count);
+}
+
 async function getStockQuote(symbol) {
   const s = String(symbol || "").toUpperCase();
   if (!/^[A-Z0-9.\\-]{1,20}$/.test(s)) throw new Error("Invalid stock symbol.");
   const [quotes, trades, bars] = await Promise.all([
     request(DATA_HOST, "/v2/stocks/quotes/latest?symbols=" + encodeURIComponent(s) + "&feed=" + encodeURIComponent(STOCK_FEED)),
     request(DATA_HOST, "/v2/stocks/trades/latest?symbols=" + encodeURIComponent(s) + "&feed=" + encodeURIComponent(STOCK_FEED)),
-    request(DATA_HOST, "/v2/stocks/bars?symbols=" + encodeURIComponent(s) + "&timeframe=1Min&limit=1000&feed=" + encodeURIComponent(STOCK_FEED) + "&adjustment=raw")
+    request(DATA_HOST, "/v2/stocks/bars?symbols=" + encodeURIComponent(s) + "&timeframe=1Day&start=" + encodeURIComponent(new Date(Date.now() - 14*86400000).toISOString()) + "&limit=1000&sort=asc&feed=" + encodeURIComponent(STOCK_FEED) + "&adjustment=raw")
   ]);
   const q = quotes?.quotes?.[s] || {}, t = trades?.trades?.[s] || {}, b = Array.isArray(bars?.bars?.[s]) ? bars.bars[s] : [];
   const bid = Number(q.bp), ask = Number(q.ap), last = Number(t.p);
   const price = finite(last) && last > 0 ? last : (finite(ask) && ask > 0 ? ask : (finite(bid) && bid > 0 ? bid : null));
-  const usableBars = b.filter(x => Number.isFinite(Number(x.c))).slice(-120);
+  const usableBars = previousTradingDayBars(b, 5);
   const history = usableBars.map(x => Number(x.c));
   const historyDates = usableBars.map(x => x.t);
+  const previousClose = history.length ? history[history.length - 1] : null;
+  const change = finite(previousClose) ? price - previousClose : null;
+  const changePct = finite(previousClose) && previousClose !== 0 ? (change / previousClose) * 100 : null;
   if (!finite(price) || price <= 0) throw new Error("Alpaca has no current quote for " + s + ".");
   const asset = assetCache.items.find(a => a.symbol === s);
-  return { symbol:s, name:asset?.name || s, price:round(price), bid:finite(bid)&&bid>0?round(bid):null, ask:finite(ask)&&ask>0?round(ask):null, open:null, previousClose:null, change:null, changePct:null, history:history.length?history:[round(price)], historyDates, historyTimeframe:"1Min", updatedAt:t.t||q.t||Date.now(), stream:false, feed:STOCK_FEED, real:true };
+  return { symbol:s, name:asset?.name || s, price:round(price), bid:finite(bid)&&bid>0?round(bid):null, ask:finite(ask)&&ask>0?round(ask):null, open:null, previousClose:finite(previousClose)?round(previousClose):null, change:finite(change)?round(change):null, changePct:finite(changePct)?round(changePct,2):null, history:history.length?history:[round(price)], historyDates, historyTimeframe:"1Day", updatedAt:t.t||q.t||Date.now(), stream:false, feed:STOCK_FEED, real:true };
 }
 
 
@@ -216,7 +236,7 @@ async function refreshMarket(market, symbols, round) {
   const [quotes, trades, bars] = await Promise.all([
     request(DATA_HOST, "/v2/stocks/quotes/latest?symbols=" + encodeURIComponent(names.join(",")) + "&feed=" + encodeURIComponent(STOCK_FEED)),
     request(DATA_HOST, "/v2/stocks/trades/latest?symbols=" + encodeURIComponent(names.join(",")) + "&feed=" + encodeURIComponent(STOCK_FEED)),
-    request(DATA_HOST, "/v2/stocks/bars?symbols=" + encodeURIComponent(names.join(",")) + "&timeframe=1Min&limit=120&feed=" + encodeURIComponent(STOCK_FEED) + "&adjustment=raw")
+    request(DATA_HOST, "/v2/stocks/bars?symbols=" + encodeURIComponent(names.join(",")) + "&timeframe=1Day&start=" + encodeURIComponent(new Date(Date.now() - 14*86400000).toISOString()) + "&limit=1000&sort=asc&feed=" + encodeURIComponent(STOCK_FEED) + "&adjustment=raw")
   ]);
 
   const qmap = quotes?.quotes || {};
@@ -247,17 +267,22 @@ async function refreshMarket(market, symbols, round) {
     stock.updatedAt = trade.t ? Date.parse(trade.t) : (quote.t ? Date.parse(quote.t) : Date.now());
     stock.lastTradeAt = trade.t ? Date.parse(trade.t) : null;
     const realBars = Array.isArray(bmap[symbol]) ? bmap[symbol] : [];
-    const usableBars = realBars.filter(b => Number.isFinite(Number(b.c))).slice(-120);
+    const usableBars = previousTradingDayBars(realBars, 5);
     const barHistory = usableBars.map(b => Number(b.c));
     if (barHistory.length) {
       stock.history = barHistory;
       stock.historyDates = usableBars.map(b => b.t);
-      stock.historyTimeframe = "1Min";
+      stock.historyTimeframe = "1Day";
+      stock.previousClose = round(barHistory[barHistory.length - 1]);
+      if (Number.isFinite(stock.price) && stock.previousClose !== 0) {
+        stock.change = round(stock.price - stock.previousClose);
+        stock.changePct = round(((stock.price - stock.previousClose) / stock.previousClose) * 100, 2);
+      }
     }
     else {
       stock.history = stock.history || [];
-      if (Number.isFinite(stock.price)) stock.history.push(stock.price);
-      stock.history = stock.history.slice(-120);
+      stock.historyDates = stock.historyDates || [];
+      stock.historyTimeframe = "1Day";
     }
   }
 
