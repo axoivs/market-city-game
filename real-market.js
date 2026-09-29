@@ -1103,16 +1103,20 @@ function clearUnusualVolumeCache(){ volumeCache.data=null; volumeCache.at=0; }
 async function getPredictions(options = {}) {
   if (!options.refresh && getPredictions.cache && Date.now()-getPredictions.cache.at < 120000) return getPredictions.cache.data;
 
+  // Fresh 100-stock cross-industry sample for every prediction refresh.
   const radar = await getRadar({refresh:true});
   const stocks = (radar.stocks||[]).filter(x=>x.hasOptions && finite(x.price) && x.price>0);
   const symbols = stocks.map(x=>x.symbol);
-  const startDate = new Date(Date.now()-45*86400000).toISOString();
+
+  // Use 90 calendar days so the signal is based on approximately 60+ trading
+  // sessions, depending on holidays/weekends.
+  const startDate = new Date(Date.now()-100*86400000).toISOString();
   const bars = new Map();
 
-  if (symbols.length) {
+  if(symbols.length){
     let token="";
-    do {
-      const q = new URLSearchParams({
+    do{
+      const q=new URLSearchParams({
         symbols:symbols.join(","),
         timeframe:"1Day",
         start:startDate,
@@ -1121,71 +1125,163 @@ async function getPredictions(options = {}) {
         adjustment:"raw",
         sort:"asc"
       });
-      if(token) q.set("page_token",token);
-      try {
+      if(token)q.set("page_token",token);
+      try{
         const data=await request(DATA_HOST,"/v2/stocks/bars?"+q.toString());
         for(const s of symbols){
           const incoming=Array.isArray(data?.bars?.[s])?data.bars[s]:[];
-          if(incoming.length) bars.set(s,[...(bars.get(s)||[]),...incoming]);
+          if(incoming.length)bars.set(s,[...(bars.get(s)||[]),...incoming]);
         }
         token=data?.next_page_token||"";
-      } catch(e) { console.error("Prediction history",e.message); token=""; }
-    } while(token);
+      }catch(e){
+        console.error("Prediction history",e.message);
+        token="";
+      }
+    }while(token);
   }
 
-  const scored=stocks.map(stock=>{
-    const history=(bars.get(stock.symbol)||[]).filter(x=>finite(x.c)&&Number(x.c)>0).sort((a,b)=>String(a.t).localeCompare(String(b.t)));
-    const latest=Number(history.at(-1)?.c||stock.price);
-    const old=Number(history[Math.max(0,history.length-31)]?.c);
-    const return30=finite(old)&&old>0?((latest-old)/old)*100:null;
-    return {...stock,price:latest,return30};
-  }).filter(x=>finite(x.return30));
+  function regressionSlope(values){
+    if(values.length<5)return 0;
+    const n=values.length;
+    let sx=0,sy=0,sxy=0,sxx=0;
+    for(let i=0;i<n;i++){sx+=i;sy+=values[i];sxy+=i*values[i];sxx+=i*i}
+    const den=n*sxx-sx*sx;
+    return den?(n*sxy-sx*sy)/den:0;
+  }
 
-  const beaten=scored.filter(x=>x.return30<0).sort((a,b)=>a.return30-b.return30).slice(0,8);
-  const extended=scored.filter(x=>x.return30>0).sort((a,b)=>b.return30-a.return30).slice(0,8);
+  function stats(stock){
+    const history=(bars.get(stock.symbol)||[])
+      .filter(x=>finite(x.c)&&Number(x.c)>0)
+      .sort((a,b)=>String(a.t||"").localeCompare(String(b.t||"")));
+    if(history.length<30)return null;
 
-  async function choose(stock,type){
-    try {
+    const closes=history.map(x=>Number(x.c));
+    const latest=closes.at(-1);
+    const first=closes[0];
+    const return90=((latest-first)/first)*100;
+    const recent30Base=closes[Math.max(0,closes.length-31)];
+    const return30=((latest-recent30Base)/recent30Base)*100;
+
+    const returns=[];
+    for(let i=1;i<closes.length;i++)returns.push((closes[i]/closes[i-1]-1)*100);
+    const mean=returns.reduce((a,b)=>a+b,0)/returns.length;
+    const variance=returns.reduce((a,b)=>a+(b-mean)**2,0)/Math.max(1,returns.length-1);
+    const volatility=Math.sqrt(variance);
+
+    const recentReturns=returns.slice(-20);
+    const recentMean=recentReturns.reduce((a,b)=>a+b,0)/Math.max(1,recentReturns.length);
+    const upDays=returns.filter(x=>x>0).length/Math.max(1,returns.length);
+
+    let peak=closes[0],maxDrawdown=0;
+    for(const price of closes){
+      peak=Math.max(peak,price);
+      maxDrawdown=Math.min(maxDrawdown,(price/peak-1)*100);
+    }
+
+    const slopePct=first>0?(regressionSlope(closes)/first*100*closes.length):0;
+    const last10SlopePct=closes.length>=10
+      ? regressionSlope(closes.slice(-10))/closes[closes.length-10]*100*10 : 0;
+
+    // Reversal setup: large 90D decline + recent stabilization/rebound + lower
+    // short-term slope relative to the longer trend. Momentum setup is the
+    // inverse: large advance + weakening recent trend.
+    const reboundScore=Math.max(0,Math.min(100,
+      (-return90)*1.15 +
+      Math.max(0,last10SlopePct)*2 +
+      Math.max(0,recentMean)*3 +
+      Math.max(0,0.5-upDays)*35 +
+      Math.min(20,Math.max(0,-maxDrawdown)*0.35)
+    ));
+    const pullbackScore=Math.max(0,Math.min(100,
+      return90*1.15 +
+      Math.max(0,-last10SlopePct)*2 +
+      Math.max(0,-recentMean)*3 +
+      Math.max(0,upDays-0.5)*35 +
+      Math.min(20,Math.max(0,-maxDrawdown)*0.15)
+    ));
+
+    return {
+      ...stock,price:latest,return90,return30,volatility,
+      recentMean,upDays,slopePct,last10SlopePct,maxDrawdown,
+      reboundScore,pullbackScore,historyDays:history.length
+    };
+  }
+
+  const scored=stocks.map(stats).filter(Boolean);
+  const reboundCandidates=scored
+    .filter(x=>x.return90<0 && x.reboundScore>0)
+    .sort((a,b)=>b.reboundScore-a.reboundScore)
+    .slice(0,12);
+  const pullbackCandidates=scored
+    .filter(x=>x.return90>0 && x.pullbackScore>0)
+    .sort((a,b)=>b.pullbackScore-a.pullbackScore)
+    .slice(0,12);
+
+  async function choose(stock,type,score){
+    try{
       const exps=await getExpirations(stock.symbol);
       const exp=exps.find(d=>{
         const days=(Date.parse(d+"T23:59:59-04:00")-Date.now())/86400000;
-        return days>=21&&days<=60;
+        return days>=21&&days<=75;
       })||exps[0];
       if(!exp)return null;
+
       const chain=await getOptionChain(stock.symbol,exp);
       const opts=chain.chain.filter(o=>{
         if(o.type!==type||!finite(o.strike))return false;
         const observed=finite(o.ask)&&o.ask>0?o.ask:o.last;
         if(!finite(observed)||observed<=0)return false;
         const m=Math.abs(o.strike-stock.price)/stock.price;
-        return m<=0.10;
+        const delta=finite(o.delta)?Math.abs(o.delta):null;
+        return m<=0.10 && (delta===null || (delta>=0.30&&delta<=0.70));
       });
+
       opts.sort((a,b)=>{
         const ad=finite(a.delta)?Math.abs(a.delta):0;
         const bd=finite(b.delta)?Math.abs(b.delta):0;
         const av=(a.volume||0)+(a.openInterest||0);
         const bv=(b.volume||0)+(b.openInterest||0);
-        return (bd>=.30&&bd<=.70)-(ad>=.30&&ad<=.70) || bv-av;
+        const aDelta=(ad>=.30&&ad<=.70)?1:0;
+        const bDelta=(bd>=.30&&bd<=.70)?1:0;
+        return (bDelta-aDelta)||(bv-av);
       });
+
       const o=opts[0];
       if(!o)return null;
-      const observed=finite(o.ask)&&o.ask>0?o.ask:o.last;
+
       return {
-        symbol:stock.symbol,name:stock.name,stockPrice:stock.price,return30:round(stock.return30,2),
-        direction:type,contractSymbol:o.contractSymbol,strike:o.strike,expirationDate:o.expirationDate,
-        ask:o.ask,bid:o.bid,last:o.last,volume:o.volume,openInterest:o.openInterest,delta:o.delta,
-        thesis:type==="call"?"30-day decline; rebound setup based on real price history and current option liquidity.":"30-day advance; pullback setup based on real price history and current option liquidity.",
+        symbol:stock.symbol,name:stock.name,stockPrice:stock.price,
+        return90:round(stock.return90,2),return30:round(stock.return30,2),
+        volatility:round(stock.volatility,2),upDays:round(stock.upDays*100,1),
+        trendSlope:round(stock.slopePct,2),recentSlope:round(stock.last10SlopePct,2),
+        signalScore:round(score,1),direction:type,contractSymbol:o.contractSymbol,
+        strike:o.strike,expirationDate:o.expirationDate,ask:o.ask,bid:o.bid,
+        last:o.last,volume:o.volume,openInterest:o.openInterest,delta:o.delta,
+        thesis:type==="call"
+          ? "90-day decline with statistical reversal characteristics: recent slope/recent returns are improving relative to the longer trend."
+          : "90-day advance with statistical pullback characteristics: recent slope/recent returns are weakening relative to the longer trend.",
         real:true
       };
-    } catch(e) { console.error("Prediction option",stock.symbol,e.message); return null; }
+    }catch(e){
+      console.error("Prediction option",stock.symbol,e.message);
+      return null;
+    }
   }
 
   let rebound=null,downside=null;
-  for(const stock of beaten){ rebound=await choose(stock,"call"); if(rebound) break; }
-  for(const stock of extended){ downside=await choose(stock,"put"); if(downside) break; }
+  for(const stock of reboundCandidates){
+    rebound=await choose(stock,"call",stock.reboundScore);
+    if(rebound)break;
+  }
+  for(const stock of pullbackCandidates){
+    downside=await choose(stock,"put",stock.pullbackScore);
+    if(downside)break;
+  }
 
-  const result={updatedAt:Date.now(),source:"Alpaca",rebound,downside,
-    methodology:"Two analytical candidates from a fresh 100-stock cross-industry Alpaca scan. Rebound selects a real call candidate after a large 30-day decline; downside selects a real put candidate after a large 30-day advance. This is an analytical signal, not a guaranteed prediction or return."};
+  const result={
+    updatedAt:Date.now(),source:"Alpaca",rebound,downside,
+    methodology:"Fresh 100-stock cross-industry Alpaca scan using 90-day daily price history. Signals combine 90-day return, recent slope, recent daily returns, up-day ratio, volatility and drawdown, then match the signal to a real current option chain. This is a statistical screening signal, not a guaranteed outcome."
+  };
   getPredictions.cache={at:Date.now(),data:result};
   return result;
 }
