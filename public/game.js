@@ -49,7 +49,17 @@ function renderWatchlist(){
   }).join("");
   $("watchlist").innerHTML=stocks+options;
   document.querySelectorAll(".watch-main[data-symbol]").forEach(b=>{
-  b.onclick=()=>selectSymbol(b.dataset.symbol);
+  b.onclick=async()=>{
+    const s=b.dataset.symbol;
+    await selectSymbol(s);
+    // A stock selected from Market Watch should immediately open its
+    // real Alpaca option chain so the user can choose a contract to buy.
+    document.querySelectorAll(".ticket-tabs button").forEach(x=>x.classList.toggle("active",x.dataset.tab==="option"));
+    $("stockTicket").hidden=true;
+    $("optionTicket").hidden=false;
+    renderChain();
+    renderOptionTicket();
+  };
   b.ondblclick=async e=>{
     e.preventDefault();
     const s=b.dataset.symbol;
@@ -59,7 +69,12 @@ function renderWatchlist(){
       saveWatchlistRemote();
     }
     await selectSymbol(s);
-    toast(s+" added to Market Watch");
+    document.querySelectorAll(".ticket-tabs button").forEach(x=>x.classList.toggle("active",x.dataset.tab==="option"));
+    $("stockTicket").hidden=true;
+    $("optionTicket").hidden=false;
+    renderChain();
+    renderOptionTicket();
+    toast(s+" added to Market Watch and opened Options");
   };
 });
   document.querySelectorAll(".option-watch-main").forEach(b=>b.onclick=()=>{
