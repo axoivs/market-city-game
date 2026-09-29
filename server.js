@@ -77,7 +77,8 @@ function player(id){
       changed=true;
     }
     if(!Array.isArray(p.watchlist)){p.watchlist=Object.keys(SYMBOLS);changed=true;}
-    if(!finite(p.startingCapital)||Number(p.startingCapital)<=0){p.startingCapital=100000;changed=true;}\n    if(!p.stockCostBasis||typeof p.stockCostBasis!=="object"){p.stockCostBasis={};changed=true;}
+    if(!finite(p.startingCapital)||Number(p.startingCapital)<=0){p.startingCapital=100000;changed=true;}
+    if(!p.stockCostBasis||typeof p.stockCostBasis!=="object"){p.stockCostBasis={};changed=true;}
     for(const k of ["stockBought","stockSold","realizedPL","optionBought","optionSold","optionRealizedPL","totalTrades"])if(!finite(p[k])){p[k]=0;changed=true;}
     if(changed)savePlayers();
   }
@@ -118,7 +119,9 @@ function portfolioStats(p){
   const totalCost=stockCost+optionCost;
   const unrealizedPL=currentHoldings-totalCost;
   const realizedPL=Number(p.realizedPL||0)+Number(p.optionRealizedPL||0);
-  // P/L is measured against starting capital, not the $100,000 cash grant.\n  const startingCapital=finite(p.startingCapital)&&Number(p.startingCapital)>0?Number(p.startingCapital):100000;\n  const netPL=portfolioValue(p)-startingCapital;
+  // P/L is measured against starting capital, not the $100,000 cash grant.
+  const startingCapital=finite(p.startingCapital)&&Number(p.startingCapital)>0?Number(p.startingCapital):100000;
+  const netPL=portfolioValue(p)-startingCapital;
   return {
     stockBought:round(p.stockBought),
     stockSold:round(p.stockSold),
@@ -135,7 +138,8 @@ function portfolioStats(p){
     realizedPL:round(realizedPL),
     stockRealizedPL:round(p.realizedPL),
     optionRealizedPL:round(p.optionRealizedPL),
-    startingCapital:round(startingCapital),\n    netPL:round(netPL),
+    startingCapital:round(startingCapital),
+    netPL:round(netPL),
     returnPct:totalCost?round(unrealizedPL/totalCost*100):0,
     stockQty,optionQty,totalTrades:Number(p.totalTrades)||0
   };
