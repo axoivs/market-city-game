@@ -36,3 +36,4 @@
 
 /* Price chart time-period labels */
 .chart-time-labels{display:grid;grid-template-columns:repeat(6,1fr);gap:4px;margin:0 26px 0;padding:0 0 2px;color:#8ea3b8;font-size:8px;line-height:14px;text-align:center;font-variant-numeric:tabular-nums;white-space:nowrap}.chart-time-labels span{overflow:hidden;text-overflow:ellipsis}.quote canvas{height:145px}.quote{overflow:hidden}
+\n/* Keep prediction option details aligned with the left side on mobile */\n@media(max-width:800px){#predictionBody .radar-row .radar-right{margin-right:auto;margin-left:0;text-align:left;max-width:58%}#predictionBody .radar-row{justify-content:flex-start}#predictionBody .radar-row>span:first-child{flex:0 0 40%}}\n
