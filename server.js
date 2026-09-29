@@ -50,6 +50,17 @@ function randomTraderUsername(id){
   return username;
 }
 function randomLoginCode(){return crypto.randomBytes(9).toString("base64url").slice(0,12);}
+
+// Server command: reset the admin account with `npm run reset-admin`.
+function resetAdminAccount(){
+  const entry=Object.entries(players).find(([id,p])=>accountKey(p?.username)==="admin");
+  if(!entry) throw new Error("Admin account not found.");
+  const [id,p]=entry;
+  Object.assign(p,{cash:100000,startingCapital:100000,positions:{},stockCostBasis:{},stockBought:0,stockSold:0,realizedPL:0,optionBought:0,optionSold:0,optionRealizedPL:0,totalTrades:0,options:[],xp:0,level:1,missions:{firstTrade:false,profitGoal:false,cityTour:false},updatedAt:Date.now()});
+  savePlayers();
+  console.log("Admin account reset: "+p.username+" ("+id+")");
+}
+if(process.argv.includes("--reset-admin")) resetAdminAccount();
 function round(n,d=2){const p=10**d;return Math.round(Number(n)*p)/p;}
 function finite(n){return n!==null&&n!==undefined&&n!==""&&Number.isFinite(Number(n));}
 function safe(n,f=0){return finite(n)?Number(n):f;}
