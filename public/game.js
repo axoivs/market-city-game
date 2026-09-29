@@ -175,9 +175,19 @@ async function drawer(screen){
       $("volumeBody").innerHTML='<div class="radar-toolbar"><button id="refreshVolume" class="ghost">↻ REFRESH VOLUME</button></div><div class="radar-section"><h3>UNUSUAL HIGH-VOLUME CALLS</h3>'+calls+'</div><div class="radar-section"><h3>UNUSUAL HIGH-VOLUME PUTS</h3>'+puts+'</div><div class="radar-foot">Updated '+new Date(r.updatedAt).toLocaleTimeString()+' · '+esc(r.source||"Alpaca")+'</div>'; $("refreshVolume").onclick=()=>{delete window.__refreshVolume; drawer("volume")};
       document.querySelectorAll("#volumeBody .radar-row").forEach(e=>e.onclick=()=>{selectSymbol(e.dataset.symbol);d.classList.add("hidden")});
     }catch(e){$("volumeBody").innerHTML='<div class="empty">'+esc(e.message)+'</div>'}
-  }else if(screen==="missions"){
-    const m=state.player?.missions||{};
-    b.innerHTML='<div class="drawer-body">'+[["firstTrade","Complete your first trade"],["cityTour","Explore Market City"],["profitGoal","Reach $110,000 portfolio value"]].map(x=>'<div class="mission"><span>'+x[1]+'</span><b>'+(m[x[0]]?"DONE":"OPEN")+'</b></div>').join("")+'</div>';
+  }else if(screen==="predictions"){
+    b.innerHTML='<div class="drawer-body"><div class="radar-note">PREDICTIONS. Fresh 100-stock cross-industry scan using real Alpaca 30-day price history and current option-chain data. These are analytical setups, not guaranteed outcomes.</div><div id="predictionBody">Loading reversal setups…</div></div>';
+    try{
+      const r=await api("/api/predictions");
+      const card=(title,x,kind)=>{
+        if(!x)return '<div class="radar-section"><h3>'+title+'</h3><div class="empty">No qualifying real Alpaca setup found in this scan.</div></div>';
+        const cls=x.return30<0?"down":"up";
+        return '<div class="radar-section"><h3>'+title+'</h3><button class="radar-row" data-symbol="'+esc(x.symbol)+'"><span><b>'+esc(x.symbol)+'</b><small>'+esc(x.name||"")+' · 30D '+(x.return30>=0?"+":"")+Number(x.return30).toFixed(2)+'%</small></span><span class="radar-right"><b class="'+cls+'">'+esc(x.contractSymbol)+'</b><small>'+esc(kind)+" · strike "+px(x.strike)+" · "+esc(x.expirationDate||"")+'</small></span></button><p class="radar-help">'+esc(x.thesis||"")+'</p></div>';
+      };
+      $("predictionBody").innerHTML='<div class="radar-toolbar"><button id="refreshPredictions" class="ghost">↻ REFRESH PREDICTIONS</button></div>'+card("REBOUND CALL — AFTER LARGE DECLINE",r.rebound,"CALL")+card("PULLBACK PUT — AFTER LARGE ADVANCE",r.downside,"PUT")+'<div class="radar-foot">Updated '+new Date(r.updatedAt).toLocaleTimeString()+' · '+esc(r.source||"Alpaca")+'</div>';
+      $("refreshPredictions").onclick=()=>drawer("predictions");
+      document.querySelectorAll("#predictionBody .radar-row").forEach(e=>e.onclick=()=>{selectSymbol(e.dataset.symbol);d.classList.add("hidden")});
+    }catch(e){$("predictionBody").innerHTML='<div class="empty">'+esc(e.message)+'</div>'}
   }else{
     b.innerHTML='<div class="drawer-body">'+(state.leaderboard||[]).map((x,i)=>'<div class="holding"><span>#'+(i+1)+" "+esc(x.name)+" · Level "+x.level+'</span><b>'+money(x.value)+'</b></div>').join("")+'</div>';
   }
