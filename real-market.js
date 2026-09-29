@@ -924,12 +924,55 @@ async function getUnusualOptionVolume() {
   // option activity in otherwise ordinary stock moves.
   const assets = await getAssets();
   const optionable = assets.filter(x => x.hasOptions);
-  const shuffled = [...optionable];
-  for (let i=shuffled.length-1;i>0;i--) {
-    const j=Math.floor(Math.random()*(i+1));
-    [shuffled[i],shuffled[j]]=[shuffled[j],shuffled[i]];
+
+  // Alpaca's asset master list does not expose an industry/sector field.
+  // Build broad industry buckets from the real company names/tickers, then
+  // randomize the bucket order and take a balanced sample. This prevents
+  // alphabetical ticker ordering from dominating the scan.
+  const industryRules = [
+    ["Technology", /software|semiconductor|chip|computer|cloud|cyber|data|tech|digital|internet|micro|systems|network/i],
+    ["Financial", /bank|banc|capital|financial|finance|insurance|reit|mortgage|credit|asset management|investment/i],
+    ["Healthcare", /health|medical|pharma|therapeut|biotech|hospital|diagnostic|clinical|drug/i],
+    ["Energy", /energy|oil|gas|petroleum|solar|renewable|power|utility|uranium/i],
+    ["Consumer", /retail|restaurant|food|beverage|apparel|fashion|consumer|grocery|home|beauty|travel|hotel/i],
+    ["Industrial", /industrial|manufactur|machin|aerospace|defense|airline|transport|logistics|construction|engineering/i],
+    ["Communication", /media|broadcast|telecom|wireless|communications|entertainment|streaming/i],
+    ["Materials", /chemical|steel|metal|mining|gold|silver|copper|material|lumber|paper|packaging/i]
+  ];
+  const buckets = new Map(industryRules.map(([name]) => [name, []]));
+  buckets.set("Other", []);
+  for (const asset of optionable) {
+    const text = (asset.name || "") + " " + (asset.symbol || "");
+    const match = industryRules.find(([,re]) => re.test(text));
+    buckets.get(match ? match[0] : "Other").push(asset);
   }
-  const symbols = shuffled.slice(0,100).map(x => x.symbol);
+
+  const shuffle = arr => {
+    const out=[...arr];
+    for(let i=out.length-1;i>0;i--){
+      const j=Math.floor(Math.random()*(i+1));
+      [out[i],out[j]]=[out[j],out[i]];
+    }
+    return out;
+  };
+
+  // Randomize industries first, then rotate through them so one industry
+  // cannot consume the entire 100-stock sample.
+  const industryOrder = shuffle([...buckets.keys()]);
+  const pools = new Map(industryOrder.map(k => [k,shuffle(buckets.get(k))]));
+  const symbols = [];
+  while (symbols.length < Math.min(100, optionable.length)) {
+    let added = false;
+    for (const industry of industryOrder) {
+      const pool = pools.get(industry);
+      if (pool.length) {
+        symbols.push(pool.pop().symbol);
+        added = true;
+        if (symbols.length >= 100) break;
+      }
+    }
+    if (!added) break;
+  }
 
   const rows=[];
   let cursor=0;
