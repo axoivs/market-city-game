@@ -154,7 +154,7 @@ async function openRadar(force=false){
     selectSymbol(e.dataset.symbol);
     d.classList.add("hidden");
   }
-});
+}; });
   }catch(e){$("radarBody").innerHTML='<div class="empty">'+esc(e.message)+'</div>'}
 }
 function outlookRow(x,period){
@@ -181,7 +181,7 @@ async function loadOutlook(days,force=false){
   e.onclick=()=>{
   const x=(r.stocks||[]).find(o=>o.contractSymbol===e.dataset.contract);
   if(x)openScannerOption(x); else selectSymbol(e.dataset.symbol);
-}); $("refreshOutlook").onclick=()=>loadOutlook(days,true);
+}; }); $("refreshOutlook").onclick=()=>loadOutlook(days,true);
   }catch(e){
     body.innerHTML='<div class="empty">'+esc(e.message)+'</div>';
   }
