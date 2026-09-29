@@ -41,3 +41,18 @@
 @media(max-width:800px){#predictionBody .radar-row{width:100%;max-width:100%;display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:6px;overflow:hidden}#predictionBody .radar-row>span{display:block;width:100%;min-width:0;max-width:100%}#predictionBody .radar-row .radar-right{width:100%;max-width:100%;margin:0;text-align:left;white-space:normal;overflow:hidden}#predictionBody .radar-row .radar-right b{display:block;max-width:100%;overflow-wrap:anywhere;word-break:break-word}#predictionBody .radar-row .radar-right small{display:block;width:100%;max-width:100%;white-space:normal;overflow-wrap:anywhere;word-break:break-word}}
 /* Keep outlook cards fully inside the mobile drawer */
 @media(max-width:800px){#outlookBody .radar-row{width:100%;max-width:100%;display:flex;flex-direction:column;align-items:stretch;justify-content:flex-start;gap:6px;overflow:hidden}#outlookBody .radar-row>span{display:block;width:100%;min-width:0;max-width:100%}#outlookBody .radar-row .radar-right{width:100%;max-width:100%;margin:0;text-align:left;white-space:normal;overflow:hidden}#outlookBody .radar-row .radar-right b{display:block;max-width:100%;overflow-wrap:anywhere;word-break:break-word}#outlookBody .radar-row .radar-right small{display:block;width:100%;max-width:100%;white-space:normal;overflow-wrap:anywhere;word-break:break-word}}
+
+.option-recommendations{margin:12px 0 0;padding:12px;border:1px solid #26384a;border-radius:10px;background:#0d1722}
+.recommend-head{display:flex;justify-content:space-between;gap:12px;align-items:flex-start;margin-bottom:10px}
+.recommend-head b{display:block;font-size:12px;letter-spacing:.08em}
+.recommend-head span{display:block;color:#8295a8;font-size:11px;margin-top:3px}
+.recommend-rule{max-width:390px;text-align:right}
+.recommend-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.recommend-grid h3{font-size:11px;margin:5px 0 7px;color:#9eb1c4;letter-spacing:.08em}
+.option-rec{width:100%;display:flex;justify-content:space-between;gap:10px;text-align:left;background:#111e2b;border:1px solid #25394b;color:#e8f0f7;border-radius:8px;padding:9px 10px;margin:6px 0;cursor:pointer}
+.option-rec:hover,.option-rec.selected-recommendation{border-color:#27b5ff}
+.option-rec small{display:block;color:#8ea1b3;font-size:10px;margin-top:3px}
+.rec-metrics{text-align:right}
+.rec-metrics b{font-size:11px}
+.recommend-foot,.recommend-empty{font-size:10px;color:#8295a8;margin-top:8px;line-height:1.4}
+@media(max-width:800px){.recommend-grid{grid-template-columns:1fr}.recommend-head{display:block}.recommend-rule{text-align:left;margin-top:7px}.option-rec{min-height:44px}}
