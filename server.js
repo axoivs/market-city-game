@@ -80,6 +80,12 @@ function player(id){
     if(!finite(p.startingCapital)||Number(p.startingCapital)<=0){p.startingCapital=100000;changed=true;}
     if(!p.stockCostBasis||typeof p.stockCostBasis!=="object"){p.stockCostBasis={};changed=true;}
     for(const k of ["stockBought","stockSold","realizedPL","optionBought","optionSold","optionRealizedPL","totalTrades"])if(!finite(p[k])){p[k]=0;changed=true;}
+    const hasPositions=Object.values(p.positions||{}).some(q=>Number(q)>0)||(p.options||[]).some(o=>Number(o.quantity)>0);
+    if(Number(p.totalTrades)===0&&!hasPositions){
+      for(const k of ["stockBought","stockSold","realizedPL","optionBought","optionSold","optionRealizedPL"]){
+        if(Number(p[k])!==0){p[k]=0;changed=true;}
+      }
+    }
     if(changed)savePlayers();
   }
   return players[id];
@@ -119,14 +125,15 @@ function portfolioStats(p){
   // This includes both stocks and options using each position's actual cost basis.
   const currentHoldings=stockCurrent+optionCurrent;
   const totalCost=stockCost+optionCost;
-  const unrealizedPL=currentHoldings-totalCost;
+  const hasOpenPositions=stockQty>0||optionQty>0;
+  const unrealizedPL=hasOpenPositions?currentHoldings-totalCost:0;
   // Realized P/L is only the gain/loss from positions that have actually been sold.
   // Stock realized P/L comes from average cost basis in stockOrder(); option realized
   // P/L comes from entry price vs. sale proceeds in optionSell().
   const realizedPL=Number(p.realizedPL||0)+Number(p.optionRealizedPL||0);
   const startingCapital=finite(p.startingCapital)&&Number(p.startingCapital)>0?Number(p.startingCapital):100000;
   const netPL=realizedPL+unrealizedPL;
-  const openReturnPct=totalCost>0?(unrealizedPL/totalCost)*100:0;
+  const openReturnPct=hasOpenPositions&&totalCost>0?(unrealizedPL/totalCost)*100:0;
   const totalReturnPct=startingCapital>0?(netPL/startingCapital)*100:0;
   return {
     stockBought:round(p.stockBought),
