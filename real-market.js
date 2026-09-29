@@ -55,10 +55,12 @@ async function getStockQuote(symbol) {
   const q = quotes?.quotes?.[s] || {}, t = trades?.trades?.[s] || {}, b = Array.isArray(bars?.bars?.[s]) ? bars.bars[s] : [];
   const bid = Number(q.bp), ask = Number(q.ap), last = Number(t.p);
   const price = finite(last) && last > 0 ? last : (finite(ask) && ask > 0 ? ask : (finite(bid) && bid > 0 ? bid : null));
-  const history = b.map(x => Number(x.c)).filter(Number.isFinite).slice(-120);
+  const usableBars = b.filter(x => Number.isFinite(Number(x.c))).slice(-120);
+  const history = usableBars.map(x => Number(x.c));
+  const historyDates = usableBars.map(x => x.t);
   if (!finite(price) || price <= 0) throw new Error("Alpaca has no current quote for " + s + ".");
   const asset = assetCache.items.find(a => a.symbol === s);
-  return { symbol:s, name:asset?.name || s, price:round(price), bid:finite(bid)&&bid>0?round(bid):null, ask:finite(ask)&&ask>0?round(ask):null, open:null, previousClose:null, change:null, changePct:null, history:history.length?history:[round(price)], updatedAt:t.t||q.t||Date.now(), stream:false, feed:STOCK_FEED, real:true };
+  return { symbol:s, name:asset?.name || s, price:round(price), bid:finite(bid)&&bid>0?round(bid):null, ask:finite(ask)&&ask>0?round(ask):null, open:null, previousClose:null, change:null, changePct:null, history:history.length?history:[round(price)], historyDates, historyTimeframe:"1Min", updatedAt:t.t||q.t||Date.now(), stream:false, feed:STOCK_FEED, real:true };
 }
 
 
@@ -245,8 +247,13 @@ async function refreshMarket(market, symbols, round) {
     stock.updatedAt = trade.t ? Date.parse(trade.t) : (quote.t ? Date.parse(quote.t) : Date.now());
     stock.lastTradeAt = trade.t ? Date.parse(trade.t) : null;
     const realBars = Array.isArray(bmap[symbol]) ? bmap[symbol] : [];
-    const barHistory = realBars.map(b => Number(b.c)).filter(Number.isFinite).slice(-120);
-    if (barHistory.length) stock.history = barHistory;
+    const usableBars = realBars.filter(b => Number.isFinite(Number(b.c))).slice(-120);
+    const barHistory = usableBars.map(b => Number(b.c));
+    if (barHistory.length) {
+      stock.history = barHistory;
+      stock.historyDates = usableBars.map(b => b.t);
+      stock.historyTimeframe = "1Min";
+    }
     else {
       stock.history = stock.history || [];
       if (Number.isFinite(stock.price)) stock.history.push(stock.price);
