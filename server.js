@@ -167,9 +167,10 @@ const server=http.createServer(async(req,res)=>{
       const result=await real.getOptionChain(symbol,expirationDate);
       return respond(res,200,{symbol,...result,source:"Alpaca/"+(process.env.ALPACA_OPTION_FEED||"indicative")});
     }
-    if(u.pathname==="/api/radar") { const radar=await real.getRadar(); return respond(res,200,{...radar,source:"Alpaca"}); }
+    if(u.pathname==="/api/radar") { if(u.searchParams.get("refresh")==="1" && real.clearRadarCache) real.clearRadarCache(); const radar=await real.getRadar(); return respond(res,200,{...radar,source:"Alpaca"}); }
     if(u.pathname==="/api/outlook") {
       const requested=Number(u.searchParams.get("days")||30);
+      if(u.searchParams.get("refresh")==="1" && real.clearOutlookCache) real.clearOutlookCache(requested);
       return respond(res,200,await real.getOutlook(requested));
     }
     if(u.pathname==="/api/unusual-volume") return respond(res,200,await real.getUnusualOptionVolume());
