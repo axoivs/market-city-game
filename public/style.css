@@ -28,3 +28,8 @@
 .profile-summary{display:grid;grid-template-columns:repeat(4,1fr);gap:7px;margin-top:8px}.profile-summary div{background:#0d1722;border:1px solid #202f40;border-radius:5px;padding:9px}.profile-summary span{display:block;color:#62768d;font-size:8px;margin-bottom:5px}.profile-summary b{font-size:10px}.holding span:first-child{min-width:0}.holding small{display:block;color:#61758a;font-size:8px;margin-top:4px;font-weight:500}.holding>b{white-space:nowrap}.holding>b small{display:inline;font-size:8px;margin-left:5px}@media(max-width:800px){.profile-metrics,.profile-summary{grid-template-columns:1fr 1fr}}
 
 .profile-holding{align-items:center;gap:12px}.holding-actions{display:flex;align-items:center;gap:10px}.sell-holding{border:1px solid #8f3f4b;background:#351820;color:#ff9aa5;border-radius:5px;padding:6px 10px;font-size:8px;font-weight:900;letter-spacing:.08em}.sell-holding:hover{background:#4a202a;color:#fff}.profile-holding>b{margin-left:auto}@media(max-width:800px){.profile-holding{align-items:flex-start}.holding-actions{flex-wrap:wrap;justify-content:flex-end}}
+
+/* Selected option block */
+.chain-table td.selected-option{background:#163149!important;outline:2px solid #27b5ff!important;outline-offset:-2px!important;box-shadow:inset 0 0 0 1px #27b5ff!important;position:relative;z-index:1}
+.chain-table tr.atm td.selected-option{background:#163149!important}
+.option-watch-row.active{background:#163149!important;box-shadow:inset 3px 0 0 #27b5ff!important}
