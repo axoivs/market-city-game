@@ -923,9 +923,13 @@ async function getUnusualOptionVolume() {
   // on the Radar's current top movers, because that can hide high-volume
   // option activity in otherwise ordinary stock moves.
   const assets = await getAssets();
-  const symbols = assets
-    .filter(x => x.hasOptions)
-    .map(x => x.symbol);
+  const optionable = assets.filter(x => x.hasOptions);
+  const shuffled = [...optionable];
+  for (let i=shuffled.length-1;i>0;i--) {
+    const j=Math.floor(Math.random()*(i+1));
+    [shuffled[i],shuffled[j]]=[shuffled[j],shuffled[i]];
+  }
+  const symbols = shuffled.slice(0,100).map(x => x.symbol);
 
   const rows=[];
   let cursor=0;
