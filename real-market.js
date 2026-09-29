@@ -1117,9 +1117,16 @@ async function getPredictions(options = {}) {
   if (!options.refresh && getPredictions.cache && Date.now()-getPredictions.cache.at < 120000) return getPredictions.cache.data;
 
   // Fresh 100-stock cross-industry sample for every prediction refresh.
-  const radar = await getRadar({refresh:true});
-  const stocks = (radar.stocks||[]).filter(x=>x.hasOptions && finite(x.price) && x.price>0);
-  const symbols = stocks.map(x=>x.symbol);
+  // Do not use Radar's ranked result list; Radar returns only top movers.
+  const allAssets = await getAssets();
+  const sampledAssets = randomIndustrySample(
+    allAssets.filter(x => x.hasOptions && (x.assetClass === "us_equity" || !x.assetClass)),
+    100
+  );
+  const stocks = sampledAssets
+    .map(x => ({symbol:x.symbol,name:x.name,hasOptions:!!x.hasOptions}))
+    .filter(x => /^[A-Z0-9.\-]{1,20}$/.test(x.symbol));
+  const symbols = stocks.map(x => x.symbol);
 
   // Use 90 calendar days so the signal is based on approximately 60+ trading
   // sessions, depending on holidays/weekends.
@@ -1293,7 +1300,10 @@ async function getPredictions(options = {}) {
 
   const result={
     updatedAt:Date.now(),source:"Alpaca",rebound,downside,
-    methodology:"Fresh 100-stock cross-industry Alpaca scan using 90-day daily price history. Signals combine 90-day return, recent slope, recent daily returns, up-day ratio, volatility and drawdown, then match the signal to a real current option chain. This is a statistical screening signal, not a guaranteed outcome."
+    scannedStocks:stocks.length,
+    qualifiedStocks:scored.length,
+    industries:"Randomized cross-industry sample",
+    methodology:"Fresh randomized 100-stock cross-industry Alpaca scan using 90-day daily price history. Signals combine 90-day return, recent slope, recent daily returns, up-day ratio, volatility and drawdown, then match the signal to a real current option chain. This is a statistical screening signal, not a guaranteed outcome."
   };
   getPredictions.cache={at:Date.now(),data:result};
   return result;
