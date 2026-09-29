@@ -1,5 +1,5 @@
 const $=id=>document.getElementById(id);
-const state={player:null,market:[],assets:[],selected:"",options:[],expirations:[],expiration:"",selectedContract:null,leaderboard:[],online:0,marketReady:false,watchlist:null,optionWatchlist:null};
+const state={player:null,market:[],assets:[],selected:"",options:[],expirations:[],expiration:"",selectedContract:null,leaderboard:[],online:0,marketReady:false,watchlist:null,optionWatchlist:null,community:null};
 let ws=null,reconnectTimer=null,chainSeq=0;
 const DEFAULT_WATCHLIST=["AAPL","MSFT","NVDA","AMZN","TSLA","GOOGL","META","JPM"];
 function watchlist(){if(state.watchlist===null){try{const x=JSON.parse(localStorage.getItem("marketCityWatchlist")||"null");state.watchlist=Array.isArray(x)&&x.length?x.map(String):[...DEFAULT_WATCHLIST]}catch{state.watchlist=[...DEFAULT_WATCHLIST]}}return state.watchlist}
@@ -21,13 +21,13 @@ let playerId=getId();
 function send(m){if(ws?.readyState===WebSocket.OPEN)ws.send(JSON.stringify(m));else toast("Live Alpaca connection is reconnecting.")}
 function connect(){clearTimeout(reconnectTimer);ws=new WebSocket("wss://"+location.host+"?playerId="+encodeURIComponent(playerId));ws.onopen=()=>{ $("marketState").textContent="ALPACA STREAM";$("marketState").className="market-state live"};ws.onmessage=e=>handle(JSON.parse(e.data));ws.onerror=()=>{$("marketState").textContent="STREAM ERROR";$("marketState").className="market-state off"};ws.onclose=()=>{ $("marketState").textContent="RECONNECTING";$("marketState").className="market-state off";reconnectTimer=setTimeout(connect,3000)}}
 function handle(m){
- if(m.type==="state"||m.type==="market"){if(m.player){state.player=m.player;if(m.player.username&&Array.isArray(m.player.watchlist))state.watchlist=m.player.watchlist}if(m.market)state.market=m.market.filter(x=>watchHas(x.symbol));if(m.leaderboard)state.leaderboard=m.leaderboard;if(Number.isFinite(m.online))state.online=m.online;if(typeof m.marketReady==="boolean")state.marketReady=m.marketReady;renderAll();if(m.type==="state")loadExpirations();return}
+ if(m.type==="state"||m.type==="market"){if(m.player){state.player=m.player;if(m.player.username&&Array.isArray(m.player.watchlist))state.watchlist=m.player.watchlist}if(m.market)state.market=m.market.filter(x=>watchHas(x.symbol));if(m.community)state.community=m.community;if(m.leaderboard)state.leaderboard=m.leaderboard;if(Number.isFinite(m.online))state.online=m.online;if(typeof m.marketReady==="boolean")state.marketReady=m.marketReady;renderAll();if(m.type==="state")loadExpirations();return}
  if(m.type==="marketTick"){if(!watchHas(m.stock.symbol))return;const i=state.market.findIndex(x=>x.symbol===m.stock.symbol);if(i<0)state.market.push(m.stock);else state.market[i]=m.stock;renderWatchlist();renderQuote();renderChart();renderTicket();return}
  if(m.type==="optionTick"){const o=state.options.find(x=>x.contractSymbol===m.contractSymbol);if(o){if(m.bid!=null)o.bid=Number(m.bid);if(m.ask!=null)o.ask=Number(m.ask);if(m.last!=null)o.last=Number(m.last);o.mid=Number.isFinite(o.bid)&&Number.isFinite(o.ask)?(o.bid+o.ask)/2:null;o.updatedAt=m.updatedAt;renderChain();renderOptionTicket()}return}
  if(m.type==="error")toast(m.message||"Request failed");
 }
-function apply(m){if(m.player){state.player=m.player;if(m.player.username&&Array.isArray(m.player.watchlist))state.watchlist=m.player.watchlist}if(m.market)state.market=m.market.filter(x=>watchHas(x.symbol));if(m.leaderboard)state.leaderboard=m.leaderboard;if(Number.isFinite(m.online))state.online=m.online;if(typeof m.marketReady==="boolean")state.marketReady=m.marketReady;renderAll()}
-async function bootstrap(){try{apply(await api("/api/bootstrap?playerId="+encodeURIComponent(playerId)+"&_="+Date.now()));try{const a=await api("/api/assets");state.assets=a.assets||[]}catch(e){console.error("Alpaca asset universe:",e.message)}populate();renderWatchlist();renderQuote();renderChart();renderTicket();connect();await loadExpirations()}catch(e){toast(e.message);setTimeout(bootstrap,4000)}}
+function apply(m){if(m.player){state.player=m.player;if(m.player.username&&Array.isArray(m.player.watchlist))state.watchlist=m.player.watchlist}if(m.market)state.market=m.market.filter(x=>watchHas(x.symbol));if(m.community)state.community=m.community;if(m.leaderboard)state.leaderboard=m.leaderboard;if(Number.isFinite(m.online))state.online=m.online;if(typeof m.marketReady==="boolean")state.marketReady=m.marketReady;renderAll()}
+async function bootstrap(){try{apply(await api("/api/bootstrap?playerId="+encodeURIComponent(playerId)+"&_="+Date.now()));state.community=state.community||{groups:[],topics:[],replies:[]};try{const a=await api("/api/assets");state.assets=a.assets||[]}catch(e){console.error("Alpaca asset universe:",e.message)}populate();renderWatchlist();renderQuote();renderChart();renderTicket();connect();await loadExpirations()}catch(e){toast(e.message);setTimeout(bootstrap,4000)}}
 function stock(){return state.market.find(x=>x.symbol===state.selected)}
 function populate(){const s=$("symbol");const q=String($("tickerSearch")?.value||"").trim().toLowerCase();const list=(state.assets.length?state.assets:state.market).filter(x=>!q||x.symbol.toLowerCase().includes(q)||String(x.name||"").toLowerCase().includes(q));s.innerHTML='<option value="">SELECT SECURITY</option>'+list.map(x=>'<option value="'+esc(x.symbol)+'">'+esc(x.symbol)+" — "+esc(x.name)+"</option>").join("");s.value=state.selected}
 function renderHeader(){const p=state.player;if(!p)return;$("cash").textContent=money(p.cash);$("portfolio").textContent=money(p.portfolioValue);$("level").textContent=p.level;$("nameBtn").textContent=p.name||"GUEST"}
@@ -426,9 +426,72 @@ async function drawer(screen,force=false){
     b.innerHTML='<div class="drawer-body">'+(state.leaderboard||[]).map((x,i)=>'<div class="holding"><span>#'+(i+1)+" "+esc(x.name)+" · Level "+x.level+'</span><b>'+money(x.value)+'</b></div>').join("")+'</div>';
   }
 }
-$("symbol").onchange=e=>selectSymbol(e.target.value);$("tickerSearch").oninput=()=>populate();$("tickerSearch").onkeydown=async e=>{if(e.key!=="Enter")return;e.preventDefault();const q=String($("tickerSearch").value||"").trim().toUpperCase();const opts=[...$("symbol").options].filter(o=>o.value);const exact=opts.find(o=>o.value.toUpperCase()===q);const first=exact||opts[0];if(first){$("symbol").value=first.value;await selectSymbol(first.value,true)}};$("expirationDates").onchange=e=>{state.expiration=e.target.value;loadChain()};$("refreshOptions").onclick=loadChain;$("buyStock").onclick=()=>orderStock("buy");$("sellStock").onclick=()=>orderStock("sell");$("buyOption").onclick=orderOption;$("closeDrawer").onclick=()=>$("drawer").classList.add("hidden");
+
+async function loadCommunity(){
+  try{
+    const d=await api("/api/community");
+    state.community=d.community||{groups:[],topics:[],replies:[]};
+  }catch(e){toast(e.message)}
+}
+function communityLoginRequired(){
+  if(!state.player?.authenticated){openAccount();$("accountStatus").textContent="Log in to create or join groups and participate in the community.";return false}
+  return true;
+}
+async function communityAction(payload){
+  if(!communityLoginRequired())return;
+  try{
+    const d=await api("/api/action",{method:"POST",headers:{"Content-Type":"application/json"},body:JSON.stringify({...payload,playerId})});
+    state.community=d.community||state.community;
+    if(d.player)state.player=d.player;
+    renderHeader();
+    renderCommunity();
+    toast("Community updated.");
+  }catch(e){toast(e.message)}
+}
+function renderCommunity(){
+  const b=$("drawerContent"),c=state.community||{groups:[],topics:[],replies:[]};
+  const groups=c.groups||[],topics=c.topics||[];
+  const groupCards=groups.map(g=>{
+    const joined=!!state.player?.username&&g.members?.includes(state.player.username);
+    return '<div class="community-card"><div><b>'+esc(g.name)+'</b><small>'+esc(g.category||"Market Talk")+' · '+Number(g.members?.length||0)+' members</small><p>'+esc(g.description||"A place for Market City traders to hang out.")+'</p></div><button class="'+(joined?"ghost":"buy")+' community-btn" data-join-group="'+esc(g.id)+'">'+(joined?"JOINED":"JOIN GROUP")+'</button></div>';
+  }).join("")||'<div class="empty">No groups yet. Be the first to create one.</div>';
+  const topicCards=topics.map(t=>{
+    const replies=(c.replies||[]).filter(r=>r.topicId===t.id);
+    return '<div class="community-topic" data-topic="'+esc(t.id)+'"><div class="topic-main"><b>'+esc(t.title)+'</b><small>'+esc(t.groupName)+' · '+esc(t.author)+' · '+new Date(t.createdAt).toLocaleString()+'</small><p>'+esc(t.body)+'</p></div><span class="topic-replies">'+Number(t.replies||0)+' replies</span><div class="topic-reply-list">'+replies.map(r=>'<div><b>'+esc(r.author)+'</b><span>'+esc(r.body)+'</span></div>').join("")+'</div><div class="topic-reply-box"><input data-reply-input="'+esc(t.id)+'" maxlength="1500" placeholder="Reply to this topic…"><button class="ghost" data-reply-topic="'+esc(t.id)+'">REPLY</button></div></div>';
+  }).join("")||'<div class="empty">No topics yet.</div>';
+  b.innerHTML='<div class="drawer-body community-body">'+
+    '<div class="community-hero"><div><div class="eyebrow">MARKET CITY COMMUNITY</div><h3>Trade ideas. Learn together. Hang out.</h3><p>Discuss stocks, options, strategies, Market City challenges, and the simulation.</p></div><button class="buy community-btn" id="createGroupBtn">CREATE GROUP</button></div>'+
+    '<div class="community-tools"><button class="ghost" id="refreshCommunity">↻ REFRESH</button><button class="buy" id="createTopicBtn">NEW TOPIC</button></div>'+
+    '<h3>GROUPS</h3><div class="community-groups">'+groupCards+'</div>'+
+    '<h3>RECENT TOPICS</h3><div class="community-topics">'+topicCards+'</div></div>';
+  $("createGroupBtn").onclick=()=>openCommunityForm("group");
+  $("createTopicBtn").onclick=()=>openCommunityForm("topic");
+  $("refreshCommunity").onclick=async()=>{await loadCommunity();renderCommunity()};
+  document.querySelectorAll("[data-join-group]").forEach(x=>x.onclick=()=>communityAction({type:"joinGroup",groupId:x.dataset.joinGroup}));
+  document.querySelectorAll("[data-reply-topic]").forEach(x=>x.onclick=()=>{
+    const input=document.querySelector('[data-reply-input="'+x.dataset.replyTopic+'"]');
+    communityAction({type:"replyTopic",topicId:x.dataset.replyTopic,body:input?.value||""});
+  });
+}
+function openCommunityForm(kind){
+  if(!communityLoginRequired())return;
+  const b=$("drawerContent");
+  if(kind==="group"){
+    b.innerHTML='<div class="drawer-body community-form"><button class="ghost" id="backCommunity">← BACK</button><h3>CREATE A GROUP</h3><p>Start a place for traders to discuss a shared interest.</p><label>GROUP NAME<input id="communityGroupName" maxlength="50" placeholder="Options Lab, Long-Term Investors…"></label><label>CATEGORY<select id="communityGroupCategory"><option>Market Talk</option><option>Options</option><option>Stock Research</option><option>Beginners</option><option>Trading Challenges</option><option>Off Topic</option></select></label><label>DESCRIPTION<textarea id="communityGroupDescription" maxlength="240" placeholder="What is this group about?"></textarea></label><button class="buy wide" id="saveCommunityGroup">CREATE GROUP</button></div>';
+    $("backCommunity").onclick=renderCommunity;
+    $("saveCommunityGroup").onclick=()=>communityAction({type:"createGroup",name:$("communityGroupName").value,category:$("communityGroupCategory").value,description:$("communityGroupDescription").value});
+  }else{
+    const groups=(state.community?.groups||[]).filter(g=>g.members?.includes(state.player?.username));
+    b.innerHTML='<div class="drawer-body community-form"><button class="ghost" id="backCommunity">← BACK</button><h3>START A TOPIC</h3><p>Choose a group you belong to and start the conversation.</p><label>GROUP<select id="communityTopicGroup">'+groups.map(g=>'<option value="'+esc(g.id)+'">'+esc(g.name)+'</option>').join("")+'</select></label><label>TITLE<input id="communityTopicTitle" maxlength="100" placeholder="What are you watching today?"></label><label>MESSAGE<textarea id="communityTopicBody" maxlength="2000" placeholder="Share your idea, question, setup, or challenge…"></textarea></label><button class="buy wide" id="saveCommunityTopic">POST TOPIC</button></div>';
+    if(!groups.length)b.innerHTML='<div class="drawer-body community-form"><button class="ghost" id="backCommunity">← BACK</button><h3>JOIN A GROUP FIRST</h3><p>You need to join a group before creating a topic.</p><button class="buy wide" id="browseGroups">BROWSE GROUPS</button></div>';
+    $("backCommunity").onclick=renderCommunity;
+    $("browseGroups")?.addEventListener("click",renderCommunity);
+    $("saveCommunityTopic")?.addEventListener("click",()=>communityAction({type:"createTopic",groupId:$("communityTopicGroup").value,title:$("communityTopicTitle").value,body:$("communityTopicBody").value}));
+  }
+}
+\n$("symbol").onchange=e=>selectSymbol(e.target.value);$("tickerSearch").oninput=()=>populate();$("tickerSearch").onkeydown=async e=>{if(e.key!=="Enter")return;e.preventDefault();const q=String($("tickerSearch").value||"").trim().toUpperCase();const opts=[...$("symbol").options].filter(o=>o.value);const exact=opts.find(o=>o.value.toUpperCase()===q);const first=exact||opts[0];if(first){$("symbol").value=first.value;await selectSymbol(first.value,true)}};$("expirationDates").onchange=e=>{state.expiration=e.target.value;loadChain()};$("refreshOptions").onclick=loadChain;$("buyStock").onclick=()=>orderStock("buy");$("sellStock").onclick=()=>orderStock("sell");$("buyOption").onclick=orderOption;$("closeDrawer").onclick=()=>$("drawer").classList.add("hidden");
 document.querySelectorAll(".ticket-tabs button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".ticket-tabs button").forEach(x=>x.classList.toggle("active",x===b));$("stockTicket").hidden=b.dataset.tab!=="stock";$("optionTicket").hidden=b.dataset.tab!=="option"});
-document.querySelectorAll(".bottom-nav button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".bottom-nav button").forEach(x=>x.classList.toggle("active",x===b));drawer(b.dataset.screen)});
+document.querySelectorAll(".bottom-nav button").forEach(b=>b.onclick=()=>{document.querySelectorAll(".bottom-nav button").forEach(x=>x.classList.toggle("active",x===b));drawer(b.dataset.screen)});\n$("communityLink").onclick=async()=>{await loadCommunity();$("drawer").classList.remove("hidden");$("drawerTitle").textContent="COMMUNITY";renderCommunity()};
 async function accountAction(kind){
   const username=$("accountUsername").value.trim(),code=$("accountCode").value.trim();
   if(!username||code.length<6){$("accountStatus").textContent="Enter a username and a login code (6+ characters).";return}
