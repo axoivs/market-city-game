@@ -936,4 +936,7 @@ function start(market, symbols, round, broadcast) {
   stockSymbols = new Set(Object.keys(symbols));
   connectStock();
 }
-module.exports = { refreshMarket, start, getOptionChain, getExpirations, getNews, publicStock, getOptionLive, getAssets, getStockQuote, getRadar, getOutlook, getUnusualOptionVolume };
+function clearRadarCache(){ radarCache.data=null; radarCache.at=0; }
+function clearOutlookCache(days){ if(getOutlook.cache) { if(days) getOutlook.cache.delete(Number(days)); else getOutlook.cache.clear(); } }
+
+module.exports = { refreshMarket, start, getOptionChain, getExpirations, getNews, publicStock, getOptionLive, getAssets, getStockQuote, getRadar, clearRadarCache, getOutlook, clearOutlookCache, getUnusualOptionVolume };
