@@ -48,7 +48,20 @@ function renderWatchlist(){
       '<button class="watch-remove option-watch-remove" data-option-remove="'+esc(o.contractSymbol)+'" title="Remove option" aria-label="Remove option">×</button></div>';
   }).join("");
   $("watchlist").innerHTML=stocks+options;
-  document.querySelectorAll(".watch-main[data-symbol]").forEach(b=>b.onclick=()=>selectSymbol(b.dataset.symbol));
+  document.querySelectorAll(".watch-main[data-symbol]").forEach(b=>{
+  b.onclick=()=>selectSymbol(b.dataset.symbol);
+  b.ondblclick=async e=>{
+    e.preventDefault();
+    const s=b.dataset.symbol;
+    if(!watchHas(s)){
+      watchlist().push(s);
+      saveWatchlistLocal();
+      saveWatchlistRemote();
+    }
+    await selectSymbol(s);
+    toast(s+" added to Market Watch");
+  };
+});
   document.querySelectorAll(".option-watch-main").forEach(b=>b.onclick=()=>{
     const o=optionWatchlist().find(x=>x.contractSymbol===b.dataset.option);
     if(!o)return;
@@ -122,7 +135,18 @@ async function openRadar(force=false){
     const setups=(r.setups||[]).map(radarSetupRow).join("")||'<div class="empty">No option setup passed the filters.</div>';
     const big=(r.bigActivity||[]).map(x=>'<button class="radar-row radar-click" data-symbol="'+esc(x.symbol)+'" data-contract="'+esc(x.contractSymbol)+'"><span><b>'+esc(x.symbol)+'</b><small>'+esc(x.contractSymbol)+'</small></span><span class="radar-right"><b>'+money(x.notional)+'</b><small>'+Number(x.volume||0).toLocaleString()+' volume</small></span></button>').join("")||'<div class="empty">No large-activity flag right now.</div>';
     $("radarBody").innerHTML='<div class="radar-toolbar"><button id="refreshRadar" class="ghost">↻ REFRESH RADAR</button></div><div class="radar-section"><h3>TRENDING UP</h3>'+up+'</div><div class="radar-section"><h3>TRENDING DOWN</h3>'+down+'</div><div class="radar-section"><h3>OPTION SETUP TRACKER</h3><p class="radar-help">Favors liquidity, tighter spreads, near-0.50 delta and 14–45 days to expiration.</p>'+setups+'</div><div class="radar-section"><h3>LARGE OPTION ACTIVITY</h3><p class="radar-help">Flags large notional activity. A trade print does not prove whether it was bought or sold.</p>'+big+'</div><div class="radar-foot">Updated '+new Date(r.updatedAt).toLocaleTimeString()+' · '+esc(r.feed||"Alpaca")+'</div>'; $("refreshRadar").onclick=()=>openRadar(true);
-    document.querySelectorAll(".radar-click").forEach(e=>e.onclick=()=>{
+    document.querySelectorAll(".radar-click").forEach(e=>{
+  e.ondblclick=async ev=>{
+    ev.preventDefault();
+    if(e.dataset.contract){
+      const x=[...(r.setups||[]),...(r.bigActivity||[])].find(o=>o.contractSymbol===e.dataset.contract);
+      if(x) await openScannerOption(x);
+    }else if(e.dataset.symbol){
+      await selectSymbol(e.dataset.symbol);
+      toast(e.dataset.symbol+" added to Market Watch");
+    }
+  };
+  e.onclick=()=>{
   if(e.dataset.contract){
     const x=[...(r.setups||[]),...(r.bigActivity||[])].find(o=>o.contractSymbol===e.dataset.contract);
     if(x)openScannerOption(x);
@@ -147,7 +171,14 @@ async function loadOutlook(days,force=false){
     const r=await api("/api/outlook?days="+encodeURIComponent(days)+(force?"&refresh=1":""));
     const rows=(r.stocks||[]).map(x=>outlookRow(x,r.periodDays)).join("")||'<div class="empty">No qualifying real Alpaca option setups were returned.</div>';
     body.innerHTML='<div class="radar-toolbar"><button id="refreshOutlook" class="ghost">↻ REFRESH OUTLOOK</button></div><div class="radar-section"><h3>'+r.periodDays+'-DAY OPTION OUTLOOK</h3><p class="radar-help">Uses real Alpaca historical price data plus current option pricing, liquidity, spread, delta and premium fit. Scores are analytics, not guaranteed returns.</p>'+rows+'</div><div class="radar-foot">Updated '+new Date(r.updatedAt).toLocaleTimeString()+' · '+esc(r.source||"Alpaca")+'</div>';
-    document.querySelectorAll("#outlookBody .radar-row").forEach(e=>e.onclick=()=>{
+    document.querySelectorAll("#outlookBody .radar-row").forEach(e=>{
+  e.ondblclick=async ev=>{
+    ev.preventDefault();
+    const x=(r.stocks||[]).find(o=>o.contractSymbol===e.dataset.contract);
+    if(x) await openScannerOption(x);
+    else if(e.dataset.symbol){await selectSymbol(e.dataset.symbol);toast(e.dataset.symbol+" added to Market Watch");}
+  };
+  e.onclick=()=>{
   const x=(r.stocks||[]).find(o=>o.contractSymbol===e.dataset.contract);
   if(x)openScannerOption(x); else selectSymbol(e.dataset.symbol);
 }); $("refreshOutlook").onclick=()=>loadOutlook(days,true);
