@@ -1,0 +1,44 @@
+name: Market City Deploy
+
+on:
+  push:
+    branches: ["main"]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: market-city-production
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Check JavaScript
+        run: npm run check && node --check real-market.js && node --check ecosystem.config.cjs
+
+  deploy:
+    needs: check
+    runs-on: self-hosted
+    steps:
+      - name: Deploy Market City
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd /var/www/market-city-game
+          git fetch origin main
+          git reset --hard origin/main
+          pm2 restart market-city-game --update-env
+          pm2 save
