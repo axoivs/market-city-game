@@ -115,19 +115,24 @@ function portfolioStats(p){
     optionCost+=(Number(o.entryPrice)||0)*q*size;
     optionCurrent+=optionMark(o)*q*size;
   }
+  // Open P/L is the mark-to-market gain/loss on positions still held.
+  // This includes both stocks and options using each position's actual cost basis.
   const currentHoldings=stockCurrent+optionCurrent;
   const totalCost=stockCost+optionCost;
   const unrealizedPL=currentHoldings-totalCost;
+  // Realized P/L is only the gain/loss from positions that have actually been sold.
+  // Stock realized P/L comes from average cost basis in stockOrder(); option realized
+  // P/L comes from entry price vs. sale proceeds in optionSell().
   const realizedPL=Number(p.realizedPL||0)+Number(p.optionRealizedPL||0);
-  // P/L is measured against starting capital, not the $100,000 cash grant.
   const startingCapital=finite(p.startingCapital)&&Number(p.startingCapital)>0?Number(p.startingCapital):100000;
-  const netPL=portfolioValue(p)-startingCapital;
+  const netPL=realizedPL+unrealizedPL;
+  const openReturnPct=totalCost>0?(unrealizedPL/totalCost)*100:0;
+  const totalReturnPct=startingCapital>0?(netPL/startingCapital)*100:0;
   return {
     stockBought:round(p.stockBought),
     stockSold:round(p.stockSold),
     optionBought:round(p.optionBought),
     optionSold:round(p.optionSold),
-    totalBought:round(Number(p.stockBought||0)+Number(p.optionBought||0)),
     currentHoldings:round(currentHoldings),
     stockCurrent:round(stockCurrent),
     optionCurrent:round(optionCurrent),
@@ -140,7 +145,9 @@ function portfolioStats(p){
     optionRealizedPL:round(p.optionRealizedPL),
     startingCapital:round(startingCapital),
     netPL:round(netPL),
-    returnPct:totalCost?round(unrealizedPL/totalCost*100):0,
+    openReturnPct:round(openReturnPct),
+    returnPct:round(openReturnPct),
+    totalReturnPct:round(totalReturnPct),
     stockQty,optionQty,totalTrades:Number(p.totalTrades)||0
   };
 }
