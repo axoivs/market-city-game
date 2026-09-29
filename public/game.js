@@ -233,10 +233,37 @@ async function drawer(screen){
     const pl=v=>'<span class="'+(Number(v)>0?"up":Number(v)<0?"down":"flat")+'">'+(Number(v)>0?"+":"")+money(v)+'</span>';
     const pct=v=>'<span class="'+(Number(v)>0?"up":Number(v)<0?"down":"flat")+'">'+(Number(v)>0?"+":"")+Number(v||0).toFixed(2)+'%</span>';
     const holdings=Object.entries(p.positions||{}).map(([sym,q])=>{const m=state.market.find(x=>x.symbol===sym),price=m?.price||0,value=Number(q)*Number(price),cost=Number(s.stockCostBasis?.[sym]||0),gain=value-cost;return '<div class="holding profile-holding"><span><b>'+esc(sym)+'</b><small>'+(q||0)+' shares · Cost '+money(cost)+' · Current '+money(price)+'</small></span><span class="holding-actions"><b>'+money(value)+' <small class="'+(gain>0?"up":gain<0?"down":"flat")+'">'+(gain>=0?"+":"")+money(gain)+'</small></b><button class="sell-holding" data-sell-symbol="'+esc(sym)+'">SELL</button></span></div>'}).join("");
-    const options=(p.options||[]).map(o=>{const value=(Number(o.marketPrice)||0)*(Number(o.quantity)||0)*(Number(o.size)||100),cost=(Number(o.entryPrice)||0)*(Number(o.quantity)||0)*(Number(o.size)||100),gain=value-cost;return '<div class="holding"><span><b>'+esc(o.contractSymbol)+'</b><small>'+o.quantity+' contracts · Cost '+money(cost)+'</small></span><b>'+money(value)+' <small class="'+(gain>0?"up":gain<0?"down":"flat")+'">'+(gain>=0?"+":"")+money(gain)+'</small></b></div>'}).join("");
+    const options=(p.options||[]).map(o=>{
+      const qty=Number(o.quantity)||0,size=Number(o.size)||100;
+      const value=(Number(o.marketPrice)||0)*qty*size;
+      const cost=(Number(o.entryPrice)||0)*qty*size;
+      const gain=value-cost;
+      const bid=Number(o.bid),ask=Number(o.ask),last=Number(o.last);
+      const sellable=Number.isFinite(bid)&&bid>0;
+      return '<div class="holding profile-holding">'+
+        '<span><b>'+esc(o.contractSymbol)+'</b><small>'+qty+' contracts · Entry '+money(o.entryPrice)+' · Bid '+money(bid)+' · Ask '+money(ask)+' · Last '+money(last)+' · Current '+money(o.marketPrice)+'</small></span>'+
+        '<span class="holding-actions"><b>'+money(value)+' <small class="'+(gain>0?"up":gain<0?"down":"flat")+'">'+(gain>=0?"+":"")+money(gain)+'</small></b>'+
+        '<button class="sell-holding" data-sell-option="'+esc(o.id||"")+'" '+(sellable?"":"disabled")+'>SELL</button></span>'+
+        '</div>';
+    }).join("");
     const openRows=holdings+options;
-    b.innerHTML='<div class="drawer-body profile-grid"><div class="profile-hero"><div class="profile-avatar">'+esc((p.name||"T").slice(0,1).toUpperCase())+'</div><div><h3>'+esc(p.name||"Trader")+'</h3><small>Trading performance · live Alpaca marks</small></div></div><div class="metric-grid profile-metrics"><div><small>TOTAL PORTFOLIO</small><b>'+money(p.portfolioValue)+'</b></div><div><small>CASH AVAILABLE</small><b>'+money(p.cash)+'</b></div><div><small>CURRENT HOLDINGS</small><b>'+money(s.currentHoldings)+'</b></div><div><small>NET P/L</small><b>'+pl(s.netPL)+'</b></div><div><small>TOTAL BOUGHT</small><b>'+money(s.totalBought)+'</b></div><div><small>COST BASIS</small><b>'+money(s.costBasis)+'</b></div><div><small>UNREALIZED P/L</small><b>'+pl(s.unrealizedPL)+'</b></div><div><small>REALIZED P/L</small><b>'+pl(s.realizedPL)+'</b></div><div><small>OPEN RETURN</small><b>'+pct(s.returnPct)+'</b></div><div><small>STOCK VALUE</small><b>'+money(s.stockCurrent)+'</b></div><div><small>OPTION VALUE</small><b>'+money(s.optionCurrent)+'</b></div><div><small>TRADES</small><b>'+Number(s.totalTrades||0).toLocaleString()+'</b></div></div><div class="profile-summary"><div><span>STOCKS BOUGHT</span><b>'+money(s.stockBought)+'</b></div><div><span>STOCKS SOLD</span><b>'+money(s.stockSold)+'</b></div><div><span>SHARES HELD</span><b>'+Number(s.stockQty||0).toLocaleString()+'</b></div><div><span>OPTIONS HELD</span><b>'+Number(s.optionQty||0).toLocaleString()+'</b></div></div><h3>Current Holdings</h3>'+(openRows||'<div class="empty">No open positions yet.</div>')+'</div>';
+    b.innerHTML='<div class="drawer-body profile-grid"><div class="profile-hero"><div class="profile-avatar">'+esc((p.name||"T").slice(0,1).toUpperCase())+'</div><div><h3>'+esc(p.name||"Trader")+'</h3><small>Trading performance · live Alpaca marks</small></div></div><div class="metric-grid profile-metrics"><div><small>TOTAL PORTFOLIO</small><b>'+money(p.portfolioValue)+'</b></div><div><small>CASH AVAILABLE</small><b>'+money(p.cash)+'</b></div><div><small>CURRENT HOLDINGS</small><b>'+money(s.currentHoldings)+'</b></div><div><small>NET P/L</small><b>'+pl(s.netPL)+'</b></div><div><small>TOTAL BOUGHT</small><b>'+money(s.totalBought)+'</b></div><div><small>COST BASIS</small><b>'+money(s.costBasis)+'</b></div><div><small>UNREALIZED P/L</small><b>'+pl(s.unrealizedPL)+'</b></div><div><small>REALIZED P/L</small><b>'+pl(s.realizedPL)+'</b></div><div><small>OPEN RETURN</small><b>'+pct(s.returnPct)+'</b></div><div><small>STOCK VALUE</small><b>'+money(s.stockCurrent)+'</b></div><div><small>OPTION VALUE</small><b>'+money(s.optionCurrent)+'</b></div><div><small>TRADES</small><b>'+Number(s.totalTrades||0).toLocaleString()+'</b></div></div><div class="profile-summary"><div><span>STOCKS BOUGHT</span><b>'+money(s.stockBought)+'</b></div><div><span>STOCKS SOLD</span><b>'+money(s.stockSold)+'</b></div><div><span>OPTIONS BOUGHT</span><b>'+money(s.optionBought)+'</b></div><div><span>OPTIONS SOLD</span><b>'+money(s.optionSold)+'</b></div><div><span>SHARES HELD</span><b>'+Number(s.stockQty||0).toLocaleString()+'</b></div><div><span>OPTIONS HELD</span><b>'+Number(s.optionQty||0).toLocaleString()+'</b></div></div><h3>Current Holdings</h3>'+(openRows||'<div class="empty">No open positions yet.</div>')+'</div>';
     document.querySelectorAll(".sell-holding").forEach(btn=>btn.onclick=()=>{
+      if(btn.dataset.sellOption){
+        const o=(p.options||[]).find(x=>String(x.id)===String(btn.dataset.sellOption));
+        if(!o)return toast("Option holding not found.");
+        const qty=Number(o.quantity)||0;
+        if(qty<1)return toast("No option contracts available to sell.");
+        const bid=Number(o.bid);
+        if(!Number.isFinite(bid)||bid<=0)return toast("No current Alpaca bid is available for this option.");
+        const amount=prompt("Sell how many "+o.contractSymbol+" contracts? (1–"+qty+")",String(qty));
+        if(amount===null)return;
+        const n=Math.floor(Number(amount));
+        if(!Number.isFinite(n)||n<1||n>qty)return toast("Enter a valid contract quantity.");
+        send({type:"optionSell",positionId:o.id,contractSymbol:o.contractSymbol,quantity:n});
+        toast("Sell order sent for "+n+" "+o.contractSymbol+" at the current Alpaca bid.");
+        return;
+      }
       const symbol=btn.dataset.sellSymbol,qty=Number(p.positions?.[symbol]||0);
       if(!symbol||qty<1)return toast("No shares available to sell.");
       const amount=prompt("Sell how many "+symbol+" shares? (1–"+qty+")",String(qty));
