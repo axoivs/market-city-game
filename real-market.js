@@ -445,7 +445,10 @@ async function getRadar() {
 
   // Full active/tradable Alpaca US-equity universe. The radar is not limited
   // to the eight stocks shown in the main Market Watch.
-  const assets = await getAssets();
+  const allAssets = await getAssets();
+  // Scan the entire real Alpaca universe, but traverse it in a randomized
+  // cross-industry order so the scan is not alphabetically sequenced.
+  const assets = randomIndustrySample(allAssets, allAssets.length);
   const assetMap = new Map(assets.map(a => [a.symbol, a]));
   const symbols = assets
     .map(a => a.symbol)
@@ -825,9 +828,11 @@ async function getOutlook(days = 30) {
   if (cached && Date.now() - cached.at < 120000) return cached.data;
 
   const radar = await getRadar();
-  const candidates = (radar.stocks || [])
-    .filter(x => x.hasOptions && finite(x.price) && x.price > 0 && finite(x.changePct))
-    .sort((a,b) => Math.abs(b.changePct) - Math.abs(a.changePct));
+  const allCandidates = (radar.stocks || [])
+    .filter(x => x.hasOptions && finite(x.price) && x.price > 0 && finite(x.changePct));
+  // Traverse candidates in a fresh randomized cross-industry order. The
+  // resulting setups are still ranked by their real analytics below.
+  const candidates = randomIndustrySample(allCandidates, allCandidates.length);
 
   // Alpaca's multi-symbol bars endpoint requires an explicit historical
   // window. Without start=, a request can default to the current day.
