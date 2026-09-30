@@ -795,3 +795,31 @@
     left:40px!important;
   }
 }
+
+
+/* Make CALLS side easier to read */
+#optionChain .chain-table thead tr:first-child th.call{
+  font-size:13px!important;
+  font-weight:900!important;
+  letter-spacing:.08em!important;
+  padding:2px 0!important;
+  text-align:center!important;
+}
+#optionChain .chain-table tbody td.call{
+  font-size:9px!important;
+  font-weight:800!important;
+}
+#optionChain .chain-table tbody td.call.click{
+  padding-left:4px!important;
+  padding-right:4px!important;
+}
+@media(max-width:600px){
+  #optionChain .chain-table thead tr:first-child th.call{
+    font-size:12px!important;
+    padding:2px 0!important;
+  }
+  #optionChain .chain-table tbody td.call{
+    font-size:8px!important;
+    font-weight:800!important;
+  }
+}
