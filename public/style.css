@@ -1064,3 +1064,14 @@
     left:10px!important;
   }
 }
+
+
+/* Move PUTS heading much farther right */
+#optionChain .chain-table thead tr:first-child th.put{
+  left:100px!important;
+}
+@media(max-width:600px){
+  #optionChain .chain-table thead tr:first-child th.put{
+    left:80px!important;
+  }
+}
