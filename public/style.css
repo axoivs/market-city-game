@@ -1041,3 +1041,15 @@
     left:-139px!important;
   }
 }
+
+
+/* Position PUTS heading over the second PUTS column, mirroring CALLS */
+#optionChain .chain-table thead tr:first-child th.put{
+  position:relative!important;
+  left:-95px!important;
+}
+@media(max-width:600px){
+  #optionChain .chain-table thead tr:first-child th.put{
+    left:-70px!important;
+  }
+}
