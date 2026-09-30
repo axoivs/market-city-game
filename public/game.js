@@ -171,13 +171,45 @@ function renderOptionRecommendations(targetId="optionRecommendations"){
   box.innerHTML='<div class="recommend-head"><div><b>OPTION FORMULA</b><span>Objective chain score — not a guaranteed-return prediction.</span></div><span class="recommend-rule">Delta 25% · Spread 20% · Liquidity 20% · DTE 15% · Theta 10% · IV 5% · Cost 5%</span></div><div class="recommend-grid"><div><h3>TOP CALLS</h3>'+callHTML+'</div><div><h3>TOP PUTS</h3>'+putHTML+'</div></div><div class="recommend-foot">Max loss shown is premium × contract size. Breakeven uses the current ask/last used by the score. Tap a result to load that exact contract into BUY OPTION.</div>';
   box.querySelectorAll("[data-recommend-contract]").forEach(b=>b.onclick=()=>selectContract(b.dataset.recommendContract));
 }
-function renderChain(){if(!state.selected||!state.options.length){$("optionChain").innerHTML="";renderOptionRecommendations();return}const calls=new Map(state.options.filter(x=>x.type==="call").map(x=>[x.strike,x])),puts=new Map(state.options.filter(x=>x.type==="put").map(x=>[x.strike,x])),strikes=[...new Set(state.options.map(x=>x.strike))].sort((a,b)=>a-b),spot=stock()?.price;let atm=strikes[0];if(Number.isFinite(spot))for(const s of strikes)if(Math.abs(s-spot)<Math.abs(atm-spot))atm=s;if(!strikes.length){$("optionChain").innerHTML='<div style="padding:28px;color:#687c91">No real contracts returned by Alpaca.</div>';return}
- const countEl=$("optionCount");const count=countEl?.value==="all"?strikes.length:Math.max(1,Number(countEl?.value||7));if(count<strikes.length){let center=strikes.indexOf(atm);if(center<0)center=0;let start=Math.max(0,Math.min(center-Math.floor((count-1)/2),strikes.length-count));strikes=strikes.slice(start,start+count)}
- const dash='<td>—</td>'.repeat(5);
- const cell=(o,side)=>{if(!o)return dash;const z=state.selectedContract?.contractSymbol===o.contractSymbol?" selected-option":"";const cls="click "+side+z,attr=' data-contract="'+esc(o.contractSymbol)+'"';return '<td class="'+cls+'"'+attr+'>'+px(o.last)+'</td><td class="'+cls+'"'+attr+'>'+px(o.bid)+'</td><td class="'+cls+'"'+attr+'>'+px(o.ask)+'</td><td class="'+cls+'"'+attr+'>'+(o.volume==null?"—":Number(o.volume).toLocaleString())+'</td><td class="'+cls+'"'+attr+'>'+(o.openInterest==null?"—":Number(o.openInterest).toLocaleString())+'</td>'};
- const labels=["LAST","BID","ASK","VOL","OI"];
+function renderChain(){
+ if(!state.selected||!state.options.length){$("optionChain").innerHTML="";renderOptionRecommendations();return}
+ const calls=new Map(state.options.filter(x=>x.type==="call").map(x=>[x.strike,x]));
+ const puts=new Map(state.options.filter(x=>x.type==="put").map(x=>[x.strike,x]));
+ let strikes=[...new Set(state.options.map(x=>x.strike))].sort((a,b)=>a-b);
+ const spot=stock()?.price; let atm=strikes[0];
+ if(Number.isFinite(spot))for(const s of strikes)if(Math.abs(s-spot)<Math.abs(atm-spot))atm=s;
+ if(!strikes.length){$("optionChain").innerHTML='<div style="padding:28px;color:#687c91">No real contracts returned by Alpaca.</div>';return}
+ const countEl=$("optionCount");
+ const count=countEl?.value==="all"?strikes.length:Math.max(1,Number(countEl?.value||7));
+ if(count<strikes.length){
+   let center=strikes.indexOf(atm);if(center<0)center=0;
+   let start=Math.max(0,Math.min(center-Math.floor((count-1)/2),strikes.length-count));
+   strikes=strikes.slice(start,start+count)
+ }
+ const dash='<td>—</td><td>—</td><td class="option-info-cell"><button type="button" class="option-info-btn" aria-label="View option details">INFO</button></td>';
+ const cell=(o,side)=>{
+   if(!o)return dash;
+   const z=state.selectedContract?.contractSymbol===o.contractSymbol?" selected-option":"";
+   const cls="click "+side+z,attr=' data-contract="'+esc(o.contractSymbol)+'"';
+   return '<td class="'+cls+'"'+attr+'>'+px(o.bid)+'</td><td class="'+cls+'"'+attr+'>'+px(o.ask)+'</td><td class="option-info-cell"><button type="button" class="option-info-btn" data-option-info="'+esc(o.contractSymbol)+'">INFO</button></td>'
+ }
+ const labels=["BID","ASK","DETAILS"];
  const heads=labels.map(x=>'<th>'+x+'</th>').join("");
- $("optionChain").innerHTML='<table class="chain-table"><thead><tr><th colspan="5" class="call">CALLS</th><th rowspan="2">STRIKE</th><th colspan="5" class="put">PUTS</th></tr><tr>'+heads+'<th class="strike-head"></th>'+heads+'</tr></thead><tbody>'+strikes.map(s=>'<tr class="'+(s===atm?"atm":"")+'">'+cell(calls.get(s),"call")+'<td class="strike">'+px(s)+'</td>'+cell(puts.get(s),"put")+'</tr>').join("")+'</tbody></table>';document.querySelectorAll("[data-contract]").forEach(e=>e.onclick=()=>selectContract(e.dataset.contract));renderOptionRecommendations()}
+ $("optionChain").innerHTML='<table class="chain-table"><thead><tr><th colspan="3" class="call">CALLS</th><th rowspan="2">STRIKE</th><th colspan="3" class="put">PUTS</th></tr><tr>'+heads+'<th class="strike-head"></th>'+heads+'</tr></thead><tbody>'+strikes.map(s=>'<tr class="'+(s===atm?"atm":"")+'">'+cell(calls.get(s),"call")+'<td class="strike">'+px(s)+'</td>'+cell(puts.get(s),"put")+'</tr>').join("")+'</tbody></table>';
+ document.querySelectorAll("[data-contract]").forEach(e=>e.onclick=()=>selectContract(e.dataset.contract));
+ document.querySelectorAll("[data-option-info]").forEach(e=>e.onclick=ev=>{ev.stopPropagation();showOptionDetails(e.dataset.optionInfo)});
+ renderOptionRecommendations()
+}
+function showOptionDetails(contractSymbol){
+ const o=state.options.find(x=>x.contractSymbol===contractSymbol);
+ if(!o)return;
+ const body='<div class="option-detail-modal"><div class="option-detail-card"><div class="option-detail-head"><div><div class="eyebrow">OPTION DETAILS</div><h3>'+esc(o.contractSymbol)+'</h3></div><button type="button" class="option-detail-close" aria-label="Close">×</button></div><div class="option-detail-grid"><div><span>LAST</span><b>'+px(o.last)+'</b></div><div><span>BID</span><b>'+px(o.bid)+'</b></div><div><span>ASK</span><b>'+px(o.ask)+'</b></div><div><span>VOLUME</span><b>'+((o.volume==null)?"—":Number(o.volume).toLocaleString())+'</b></div><div><span>OPEN INTEREST</span><b>'+((o.openInterest==null)?"—":Number(o.openInterest).toLocaleString())+'</b></div><div><span>DELTA</span><b>'+num(o.delta)+'</b></div><div><span>GAMMA</span><b>'+num(o.gamma)+'</b></div><div><span>THETA</span><b>'+num(o.theta)+'</b></div><div><span>VEGA</span><b>'+num(o.vega)+'</b></div><div><span>IV</span><b>'+(o.iv==null?"—":Number(o.iv).toFixed(2)+"%")+'</b></div></div></div></div>';
+ $("toast").insertAdjacentHTML("afterend",body);
+ const modal=document.querySelector(".option-detail-modal");
+ const close=()=>modal?.remove();
+ modal.querySelector(".option-detail-close")?.addEventListener("click",close);
+ modal.addEventListener("click",e=>{if(e.target===modal)close()});
+}
 function selectContract(s){
   state.selectedContract=state.options.find(x=>x.contractSymbol===s)||null;
   if(state.selectedContract&&!optionWatchHas(state.selectedContract.contractSymbol)){
