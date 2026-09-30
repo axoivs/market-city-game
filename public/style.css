@@ -1116,3 +1116,39 @@
     transform:translateX(34px)!important;
   }
 }
+
+
+/* Final CALLS / PUTS header alignment: flush to top edge and move PUTS left */
+#optionChain .chain-table thead tr:first-child{
+  height:24px!important;
+}
+#optionChain .chain-table thead tr:first-child th.call,
+#optionChain .chain-table thead tr:first-child th.put{
+  top:0!important;
+  vertical-align:top!important;
+  height:24px!important;
+  padding-top:0!important;
+  padding-bottom:0!important;
+  line-height:20px!important;
+  transform:none!important;
+}
+#optionChain .chain-table thead tr:first-child th.put{
+  transform:translateX(-18px)!important;
+}
+@media(max-width:800px){
+  #optionChain .chain-table thead tr:first-child{
+    height:22px!important;
+  }
+  #optionChain .chain-table thead tr:first-child th.call,
+  #optionChain .chain-table thead tr:first-child th.put{
+    top:0!important;
+    height:22px!important;
+    padding-top:0!important;
+    padding-bottom:0!important;
+    line-height:18px!important;
+    vertical-align:top!important;
+  }
+  #optionChain .chain-table thead tr:first-child th.put{
+    transform:translateX(-14px)!important;
+  }
+}
