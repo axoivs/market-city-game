@@ -1280,3 +1280,46 @@
     line-height:20px!important;
   }
 }
+
+
+/* Lock CALLS and PUTS to the same horizontal and vertical positions while scrolling */
+#optionChain .chain-table{
+  position:relative!important;
+}
+#optionChain .chain-table thead{
+  position:sticky!important;
+  top:0!important;
+  z-index:50!important;
+  display:table-header-group!important;
+}
+#optionChain .chain-table thead tr:first-child{
+  position:sticky!important;
+  top:0!important;
+  z-index:51!important;
+  height:24px!important;
+  background:#080d13!important;
+}
+#optionChain .chain-table thead tr:first-child th.call,
+#optionChain .chain-table thead tr:first-child th.put{
+  position:sticky!important;
+  top:0!important;
+  z-index:52!important;
+  left:auto!important;
+  right:auto!important;
+  transform:none!important;
+  margin:0!important;
+  background:#080d13!important;
+  height:24px!important;
+  padding:0!important;
+  line-height:24px!important;
+  vertical-align:middle!important;
+  text-align:center!important;
+}
+@media(max-width:600px){
+  #optionChain .chain-table thead tr:first-child th.call,
+  #optionChain .chain-table thead tr:first-child th.put{
+    top:0!important;
+    height:20px!important;
+    line-height:20px!important;
+  }
+}
