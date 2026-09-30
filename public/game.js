@@ -179,13 +179,7 @@ function renderChain(){
  const spot=stock()?.price; let atm=strikes[0];
  if(Number.isFinite(spot))for(const s of strikes)if(Math.abs(s-spot)<Math.abs(atm-spot))atm=s;
  if(!strikes.length){$("optionChain").innerHTML='<div style="padding:28px;color:#687c91">No real contracts returned by Alpaca.</div>';return}
- const countEl=$("optionCount");
- const count=countEl?.value==="all"?strikes.length:Math.max(1,Number(countEl?.value||7));
- if(count<strikes.length){
-   let center=strikes.indexOf(atm);if(center<0)center=0;
-   let start=Math.max(0,Math.min(center-Math.floor((count-1)/2),strikes.length-count));
-   strikes=strikes.slice(start,start+count)
- }
+ strikes=strikes.slice(0,strikes.length)
  const cell=(o,side)=>{
    if(!o)return '<td>—</td><td>—</td><td>—</td><td class="option-info-cell"><button type="button" class="option-info-btn" aria-label="View option details">INFO</button></td>';
    const z=state.selectedContract?.contractSymbol===o.contractSymbol?" selected-option":"";
