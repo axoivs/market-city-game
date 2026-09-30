@@ -1129,3 +1129,18 @@
   outline:none!important;
   border-radius:0!important;
 }
+
+
+/* Remove the visible header blocks behind CALLS and PUTS text */
+#optionChain .chain-table thead tr:first-child{
+  background:transparent!important;
+  background-color:transparent!important;
+}
+#optionChain .chain-table thead tr:first-child th,
+#optionChain .chain-table thead tr:first-child th.call,
+#optionChain .chain-table thead tr:first-child th.put{
+  background:transparent!important;
+  background-color:transparent!important;
+  border:none!important;
+  box-shadow:none!important;
+}
