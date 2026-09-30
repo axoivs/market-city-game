@@ -139,3 +139,21 @@
   #optionChain .option-info-btn{padding:3px 3px;font-size:6px}
   #optionChain .chain-table .call-label,#optionChain .chain-table .put-label{transform:none}
 }
+
+
+/* Ultra-compact option chain */
+#optionChain{max-width:100%;overflow:hidden}
+#optionChain .chain-table{width:auto;max-width:100%;margin:0 auto;border-collapse:collapse;table-layout:auto}
+#optionChain .chain-table th,#optionChain .chain-table td{padding:1px 1px!important;line-height:1!important;height:14px}
+#optionChain .chain-table th{font-size:6px!important;letter-spacing:0!important}
+#optionChain .chain-table td{font-size:7px!important}
+#optionChain .chain-table .strike{font-size:7px!important;font-weight:900;padding-left:3px!important;padding-right:3px!important}
+#optionChain .option-info-cell{padding:1px!important}
+#optionChain .option-info-btn{padding:1px 2px!important;font-size:5px!important;line-height:1!important;height:12px}
+@media(max-width:600px){
+  #optionChain .chain-table th,#optionChain .chain-table td{padding:1px 0!important;height:12px}
+  #optionChain .chain-table th{font-size:5px!important}
+  #optionChain .chain-table td{font-size:6px!important}
+  #optionChain .chain-table .strike{font-size:6px!important;padding-left:2px!important;padding-right:2px!important}
+  #optionChain .option-info-btn{padding:1px!important;font-size:4px!important;height:10px}
+}
