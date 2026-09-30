@@ -567,3 +567,19 @@
     width:11%!important;
   }
 }
+
+
+/* Larger mobile INFO buttons */
+@media(max-width:600px){
+  #optionChain .option-info-btn{
+    min-width:32px!important;
+    width:auto!important;
+    max-width:none!important;
+    height:19px!important;
+    padding:1px 5px!important;
+    font-size:7px!important;
+    font-weight:900!important;
+    line-height:16px!important;
+    border-radius:4px!important;
+  }
+}
