@@ -1105,3 +1105,14 @@
     transform:translateX(18px)!important;
   }
 }
+
+
+/* Fine-tune PUTS heading farther right */
+#optionChain .chain-table thead tr:first-child th.put{
+  transform:translateX(42px)!important;
+}
+@media(max-width:600px){
+  #optionChain .chain-table thead tr:first-child th.put{
+    transform:translateX(34px)!important;
+  }
+}
