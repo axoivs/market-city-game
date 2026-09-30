@@ -989,3 +989,29 @@
     left:-70px!important;
   }
 }
+
+
+/* Remove every header rectangle/background around CALLS and PUTS */
+#optionChain .chain-table thead,
+#optionChain .chain-table thead tr,
+#optionChain .chain-table thead th,
+#optionChain .chain-table thead th.call,
+#optionChain .chain-table thead th.put{
+  background:transparent!important;
+  background-color:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+  outline:0!important;
+  border-radius:0!important;
+}
+#optionChain .chain-table thead tr:nth-child(2) th{
+  background:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+}
+#optionChain .chain-table thead th.chain-label-hidden{
+  display:none!important;
+  background:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+}
