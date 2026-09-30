@@ -1497,3 +1497,75 @@
     font-size:11px!important;
   }
 }
+
+
+/* BRAND NEW OPTION QUOTE HEADER: LAST / BID / ASK aligned to each live column */
+#optionChain .chain-fixed-headings{
+  position:absolute!important;
+  left:0!important;
+  top:0!important;
+  width:100%!important;
+  height:24px!important;
+  display:grid!important;
+  grid-template-columns:repeat(4,minmax(0,1fr)) minmax(70px,.65fr) repeat(4,minmax(0,1fr))!important;
+  align-items:center!important;
+  margin:0!important;
+  padding:0!important;
+  z-index:600!important;
+  pointer-events:none!important;
+  background:transparent!important;
+}
+#optionChain .chain-fixed-headings span{
+  position:static!important;
+  display:block!important;
+  min-width:0!important;
+  width:auto!important;
+  height:24px!important;
+  margin:0!important;
+  padding:0!important;
+  text-align:center!important;
+  line-height:24px!important;
+  font-size:9px!important;
+  font-weight:900!important;
+  letter-spacing:.08em!important;
+  color:#8fa3b8!important;
+  background:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+  outline:0!important;
+  transform:none!important;
+}
+#optionChain .chain-fixed-headings span:nth-child(1),
+#optionChain .chain-fixed-headings span:nth-child(2),
+#optionChain .chain-fixed-headings span:nth-child(3){
+  color:#59d994!important;
+}
+#optionChain .chain-fixed-headings span:nth-child(6),
+#optionChain .chain-fixed-headings span:nth-child(7),
+#optionChain .chain-fixed-headings span:nth-child(8){
+  color:#ff7180!important;
+}
+#optionChain .chain-fixed-headings span:nth-child(4),
+#optionChain .chain-fixed-headings span:nth-child(9){
+  font-size:0!important;
+}
+#optionChain .chain-old-head,
+#optionChain .chain-old-subhead,
+#optionChain .chain-table thead{
+  display:none!important;
+}
+@media(max-width:600px){
+  #optionChain .chain-fixed-headings{
+    height:20px!important;
+    grid-template-columns:repeat(4,minmax(0,1fr)) minmax(42px,.65fr) repeat(4,minmax(0,1fr))!important;
+  }
+  #optionChain .chain-fixed-headings span{
+    height:20px!important;
+    line-height:20px!important;
+    font-size:7px!important;
+  }
+  #optionChain .chain-fixed-headings span:nth-child(4),
+  #optionChain .chain-fixed-headings span:nth-child(9){
+    font-size:0!important;
+  }
+}
