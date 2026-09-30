@@ -1152,3 +1152,13 @@
     transform:translateX(-14px)!important;
   }
 }
+
+
+/* Mobile: nudge CALLS / PUTS / STRIKE header row upward slightly */
+@media(max-width:800px){
+  #optionChain .chain-table thead tr:first-child th.call,
+  #optionChain .chain-table thead tr:first-child th.put,
+  #optionChain .chain-table thead tr:first-child th:not(.call):not(.put){
+    top:-2px!important;
+  }
+}
