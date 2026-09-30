@@ -688,3 +688,26 @@
     left:-4px!important;
   }
 }
+
+
+/* Further raise and shift PUT option-chain labels */
+#optionChain .chain-table thead tr:nth-child(2) th{
+  top:-6px!important;
+}
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(6),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(7),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(8),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(9){
+  left:-14px!important;
+}
+@media(max-width:600px){
+  #optionChain .chain-table thead tr:nth-child(2) th{
+    top:-6px!important;
+  }
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(6),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(7),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(8),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(9){
+    left:-10px!important;
+  }
+}
