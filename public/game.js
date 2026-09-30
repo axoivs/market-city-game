@@ -172,7 +172,8 @@ function renderOptionRecommendations(targetId="optionRecommendations"){
   box.querySelectorAll("[data-recommend-contract]").forEach(b=>b.onclick=()=>selectContract(b.dataset.recommendContract));
 }
 function renderChain(){if(!state.selected||!state.options.length){$("optionChain").innerHTML="";renderOptionRecommendations();return}const calls=new Map(state.options.filter(x=>x.type==="call").map(x=>[x.strike,x])),puts=new Map(state.options.filter(x=>x.type==="put").map(x=>[x.strike,x])),strikes=[...new Set(state.options.map(x=>x.strike))].sort((a,b)=>a-b),spot=stock()?.price;let atm=strikes[0];if(Number.isFinite(spot))for(const s of strikes)if(Math.abs(s-spot)<Math.abs(atm-spot))atm=s;if(!strikes.length){$("optionChain").innerHTML='<div style="padding:28px;color:#687c91">No real contracts returned by Alpaca.</div>';return}
- const dash='<td>—</td>'.repeat(10);
+ const countEl=$("optionCount");const count=countEl?.value==="all"?strikes.length:Math.max(1,Number(countEl?.value||7));if(count<strikes.length){let center=strikes.indexOf(atm);if(center<0)center=0;let start=Math.max(0,Math.min(center-Math.floor((count-1)/2),strikes.length-count));strikes=strikes.slice(start,start+count)}
+ const dash='<td>—</td>'.repeat(5);
  const cell=(o,side)=>{if(!o)return dash;const z=state.selectedContract?.contractSymbol===o.contractSymbol?" selected-option":"";const cls="click "+side+z,attr=' data-contract="'+esc(o.contractSymbol)+'"';return '<td class="'+cls+'"'+attr+'>'+px(o.last)+'</td><td class="'+cls+'"'+attr+'>'+px(o.bid)+'</td><td class="'+cls+'"'+attr+'>'+px(o.ask)+'</td><td class="'+cls+'"'+attr+'>'+(o.volume==null?"—":Number(o.volume).toLocaleString())+'</td><td class="'+cls+'"'+attr+'>'+(o.openInterest==null?"—":Number(o.openInterest).toLocaleString())+'</td>'};
  const labels=["LAST","BID","ASK","VOL","OI"];
  const heads=labels.map(x=>'<th>'+x+'</th>').join("");
