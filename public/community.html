@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Market City Community</title>
+<link rel="icon" type="image/png" href="/monster.webp">
+<link rel="stylesheet" href="/community.css">
+</head>
+<body>
+<header class="community-top">
+  <div class="top-inner">
+    <a class="back-link" href="/">← Back to Market City</a>
+    <div class="community-brand"><span>💬</span><strong>MARKET CITY COMMUNITY</strong></div>
+    <button id="loginBtn" class="orange-link">LOGIN</button>
+  </div>
+</header>
+<main class="community-page">
+  <section class="welcome">
+    <div>
+      <div class="eyebrow">WELCOME TO THE COMMUNITY</div>
+      <h1>Learn stocks. Ask questions. Meet people.</h1>
+      <p>You don't need to know everything about stocks or options to join in. Ask questions, learn at your own pace, and chat with other Market City players.</p>
+    </div>
+    <div class="welcome-actions"><button id="profileBtn" class="primary" disabled>MY PROFILE</button><button id="newGroupTop" class="outline">START A GROUP</button></div>
+  </section>
+
+  <section class="chat-card">
+    <div class="section-title"><div><span>💬</span><h2>WORLD CHAT</h2><small>Everyone is welcome. Say hello.</small></div><b id="onlineCount">0 online</b></div>
+    <div id="chatMessages" class="chat-messages"></div>
+    <form id="chatForm" class="chat-form"><input id="chatInput" maxlength="500" placeholder="Say something..." autocomplete="off"><button class="primary">SEND</button></form>
+  </section>
+
+  <div class="layout">
+    <section>
+      <div class="section-heading"><div><h2>COMMUNITY GROUPS</h2><p>Start with a group that matches what you want to learn.</p></div><button id="newGroup" class="outline">+ START A GROUP</button></div>
+      <div id="groups" class="groups"></div>
+    </section>
+    <aside class="side-column">
+      <section class="small-card"><h3>NEW TO STOCKS?</h3><p>That's exactly what this community is for.</p><div class="learn-list"><span>📈 What is a stock?</span><span>⚡ Calls vs. puts</span><span>💰 Buying & selling</span><span>🔎 How people research</span></div></section>
+      <section class="small-card"><h3>POPULAR DISCUSSIONS</h3><div id="popularTopics"></div></section>
+      <section class="small-card"><h3>MY COMMUNITY</h3><div id="myCommunity">Log in to see your friends and messages.</div></section>
+    </aside>
+  </div>
+</main>
+
+<div id="groupModal" class="modal hidden"><div class="modal-card wide-modal"><button class="modal-x" data-close="groupModal">×</button><div id="groupView"></div></div></div>
+<div id="topicModal" class="modal hidden"><div class="modal-card wide-modal"><button class="modal-x" data-close="topicModal">×</button><div id="topicView"></div></div></div>
+<div id="profileModal" class="modal hidden"><div class="modal-card"><button class="modal-x" data-close="profileModal">×</button><div id="profileView"></div></div></div>
+<div id="messageModal" class="modal hidden"><div class="modal-card wide-modal"><button class="modal-x" data-close="messageModal">×</button><div id="messageView"></div></div></div>
+<div id="accountModal" class="modal hidden"><div class="modal-card"><button class="modal-x" data-close="accountModal">×</button>
+  <div class="eyebrow">MARKET CITY ID</div><h2>LOG IN TO JOIN IN</h2>
+  <p class="modal-copy">A login lets you create groups and topics, edit your profile, add friends, and send private messages.</p>
+  <label>Username<input id="accountUsername" maxlength="24" autocomplete="username"></label>
+  <label>Login code<input id="accountCode" minlength="6" autocomplete="off" placeholder="6+ characters"></label>
+  <div class="form-buttons"><button id="communityLogin" class="outline">LOGIN</button><button id="communityCreate" class="primary">CREATE LOGIN</button></div>
+  <div id="accountStatus" class="status"></div>
+</div></div>
+<div id="toast" class="toast"></div>
+<script src="/community.js"></script>
+</body>
+</html>
