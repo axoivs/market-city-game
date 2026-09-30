@@ -1144,3 +1144,43 @@
   border:none!important;
   box-shadow:none!important;
 }
+
+
+/* Final fix: render CALLS/PUTS as clean text instead of table-cell text */
+#optionChain .chain-table thead tr:first-child th.call,
+#optionChain .chain-table thead tr:first-child th.put{
+  background:transparent!important;
+  background-color:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+  outline:0!important;
+  font-size:0!important;
+  color:transparent!important;
+  text-shadow:none!important;
+}
+#optionChain .chain-table thead tr:first-child th.call::after,
+#optionChain .chain-table thead tr:first-child th.put::after{
+  display:block!important;
+  background:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+  font-size:13px!important;
+  font-weight:900!important;
+  line-height:18px!important;
+  letter-spacing:.08em!important;
+}
+#optionChain .chain-table thead tr:first-child th.call::after{
+  content:"CALLS";
+  color:#59d994!important;
+}
+#optionChain .chain-table thead tr:first-child th.put::after{
+  content:"PUTS";
+  color:#ff7180!important;
+}
+@media(max-width:600px){
+  #optionChain .chain-table thead tr:first-child th.call::after,
+  #optionChain .chain-table thead tr:first-child th.put::after{
+    font-size:11px!important;
+    line-height:16px!important;
+  }
+}
