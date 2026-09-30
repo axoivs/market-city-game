@@ -113,3 +113,16 @@
   #optionChain .chain-table th:nth-child(9),#optionChain .chain-table td:nth-child(9){width:8%}
   #optionChain .chain-table th:nth-child(5),#optionChain .chain-table td:nth-child(5){width:12%}
 }
+
+
+@media(max-width:600px){
+  #optionChain{display:flex;justify-content:center;overflow:hidden;width:100%}
+  #optionChain .chain-table{width:auto;max-width:100%;margin:0 auto;table-layout:auto;border-collapse:collapse}
+  #optionChain .chain-table th,#optionChain .chain-table td{padding:2px 1px;width:auto}
+  #optionChain .chain-table th{font-size:6px}
+  #optionChain .chain-table td{font-size:7px}
+  #optionChain .chain-table .strike{font-size:8px;padding-left:3px;padding-right:3px}
+  #optionChain .option-info-cell{padding-left:1px!important;padding-right:1px!important}
+  #optionChain .option-info-btn{padding:2px 2px;font-size:5px}
+  #optionChain .chain-table .call-label,#optionChain .chain-table .put-label{transform:none}
+}
