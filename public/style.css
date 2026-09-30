@@ -978,3 +978,14 @@
     left:-90px!important;
   }
 }
+
+
+/* Move PUTS INFO label slightly right */
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(9){
+  left:-95px!important;
+}
+@media(max-width:600px){
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(9){
+    left:-70px!important;
+  }
+}
