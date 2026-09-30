@@ -1028,3 +1028,16 @@
     left:-145px!important;
   }
 }
+
+
+/* Tiny right adjustment for PUTS LAST and BID labels */
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(6),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(7){
+  left:-174px!important;
+}
+@media(max-width:600px){
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(6),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(7){
+    left:-139px!important;
+  }
+}
