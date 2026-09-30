@@ -222,3 +222,18 @@
   #optionChain .chain-table tbody td{font-size:7px!important;height:8px!important}
   #optionChain .chain-table tbody tr{height:8px!important}
 }
+
+
+/* Larger readable option-chain typography, without adding spacing */
+#optionChain .chain-table thead tr:first-child th.call,
+#optionChain .chain-table thead tr:first-child th.put{font-size:13px!important;font-weight:900!important}
+#optionChain .chain-table thead tr:nth-child(2) th{font-size:9px!important;font-weight:900!important}
+#optionChain .chain-table tbody td{font-size:9px!important;font-weight:700!important}
+#optionChain .chain-table .strike{font-size:10px!important;font-weight:900!important}
+@media(max-width:600px){
+  #optionChain .chain-table thead tr:first-child th.call,
+  #optionChain .chain-table thead tr:first-child th.put{font-size:11px!important}
+  #optionChain .chain-table thead tr:nth-child(2) th{font-size:8px!important}
+  #optionChain .chain-table tbody td{font-size:8px!important}
+  #optionChain .chain-table .strike{font-size:9px!important}
+}
