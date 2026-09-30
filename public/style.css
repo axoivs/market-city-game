@@ -961,3 +961,20 @@
     left:-65px!important;
   }
 }
+
+
+/* PUTS headers: move LAST/BID/ASK/INFO far left */
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(6),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(7),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(8),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(9){
+  left:-120px!important;
+}
+@media(max-width:600px){
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(6),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(7),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(8),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(9){
+    left:-90px!important;
+  }
+}
