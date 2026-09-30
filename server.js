@@ -592,6 +592,7 @@ if(u.pathname==="/api/unusual-volume") { if(u.searchParams.get("refresh")==="1" 
       else throw new Error("Unknown action");
       return respond(res,200,{playerId:id,player:publicPlayer(p),market:marketPayload(),leaderboard:leaderboard(),online:sockets.size,marketReady});
     }
+    if(u.pathname==="/community")u.pathname="/community.html";
     let file=u.pathname==="/"?"index.html":u.pathname.replace(/^\/+/,"");
     const fp=path.normalize(path.join(PUBLIC,file));
     if(!fp.startsWith(PUBLIC))return res.writeHead(403).end("Forbidden");
