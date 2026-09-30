@@ -1108,3 +1108,13 @@
     left:129px!important;
   }
 }
+
+
+/* Remove CALLS/PUTS header boxes so headings are clear */
+#optionChain .chain-table thead tr:first-child th.call,
+#optionChain .chain-table thead tr:first-child th.put{
+  background:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+  outline:0!important;
+}
