@@ -190,3 +190,35 @@
   #optionChain .chain-table .strike{font-size:8px!important;padding:0 2px!important}
   #optionChain .option-info-btn{height:9px!important;font-size:4px!important;padding:1px!important;line-height:7px!important}
 }
+
+
+/* Readable CALLS/PUTS headings and compact data spacing */
+#optionChain .chain-table thead tr:first-child th.call,
+#optionChain .chain-table thead tr:first-child th.put{
+  font-size:10px!important;
+  line-height:1!important;
+  padding:1px 0!important;
+  height:12px!important;
+  letter-spacing:.04em!important;
+}
+#optionChain .chain-table thead tr:nth-child(2) th{
+  font-size:7px!important;
+  padding:0 1px!important;
+  height:9px!important;
+  line-height:1!important;
+}
+#optionChain .chain-table tbody td{
+  padding:0 1px!important;
+  height:9px!important;
+  line-height:1!important;
+}
+#optionChain .chain-table tbody tr{height:9px!important}
+#optionChain .chain-table .strike{padding-left:2px!important;padding-right:2px!important}
+#optionChain .option-info-btn{margin:0!important;padding:0 1px!important;height:9px!important;line-height:8px!important}
+@media(max-width:600px){
+  #optionChain .chain-table thead tr:first-child th.call,
+  #optionChain .chain-table thead tr:first-child th.put{font-size:8px!important;height:10px!important}
+  #optionChain .chain-table thead tr:nth-child(2) th{font-size:6px!important;height:8px!important}
+  #optionChain .chain-table tbody td{font-size:7px!important;height:8px!important}
+  #optionChain .chain-table tbody tr{height:8px!important}
+}
