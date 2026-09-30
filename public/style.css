@@ -823,3 +823,33 @@
     font-weight:800!important;
   }
 }
+
+
+/* Keep CALLS values clearly separated from BID labels */
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(1),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(2),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(3){
+  transform:none!important;
+  white-space:nowrap!important;
+}
+#optionChain .chain-table tbody td.call{
+  position:relative!important;
+  z-index:1!important;
+  white-space:nowrap!important;
+  overflow:visible!important;
+  text-align:center!important;
+}
+#optionChain .chain-table tbody td.call:nth-child(1),
+#optionChain .chain-table tbody td.call:nth-child(2),
+#optionChain .chain-table tbody td.call:nth-child(3){
+  padding-left:7px!important;
+  padding-right:7px!important;
+}
+@media(max-width:600px){
+  #optionChain .chain-table tbody td.call:nth-child(1),
+  #optionChain .chain-table tbody td.call:nth-child(2),
+  #optionChain .chain-table tbody td.call:nth-child(3){
+    padding-left:5px!important;
+    padding-right:5px!important;
+  }
+}
