@@ -1227,3 +1227,56 @@
 #optionChain .chain-table thead tr:first-child th.put::after{
   background:#080d13!important;
 }
+
+
+/* Clean final CALLS / PUTS sticky header layout */
+#optionChain .chain-table thead tr:first-child{
+  position:sticky!important;
+  top:0!important;
+  z-index:40!important;
+  height:24px!important;
+  background:#080d13!important;
+}
+#optionChain .chain-table thead tr:first-child th.call,
+#optionChain .chain-table thead tr:first-child th.put{
+  position:static!important;
+  left:auto!important;
+  top:auto!important;
+  transform:none!important;
+  background:#080d13!important;
+  background-color:#080d13!important;
+  border:0!important;
+  box-shadow:none!important;
+  outline:none!important;
+  height:24px!important;
+  padding:0!important;
+  font-size:13px!important;
+  font-weight:900!important;
+  line-height:24px!important;
+  letter-spacing:.08em!important;
+  text-align:center!important;
+  vertical-align:middle!important;
+}
+#optionChain .chain-table thead tr:first-child th.call{
+  color:#59d994!important;
+}
+#optionChain .chain-table thead tr:first-child th.put{
+  color:#ff7180!important;
+}
+/* Use the real header text; remove the temporary overlay text */
+#optionChain .chain-table thead tr:first-child th.call::after,
+#optionChain .chain-table thead tr:first-child th.put::after{
+  content:none!important;
+  display:none!important;
+}
+@media(max-width:600px){
+  #optionChain .chain-table thead tr:first-child{
+    height:20px!important;
+  }
+  #optionChain .chain-table thead tr:first-child th.call,
+  #optionChain .chain-table thead tr:first-child th.put{
+    height:20px!important;
+    font-size:11px!important;
+    line-height:20px!important;
+  }
+}
