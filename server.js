@@ -11,6 +11,7 @@ const PUBLIC = path.join(__dirname, "public");
 const DATA_DIR = path.join(__dirname, "data");
 const PLAYERS_FILE = path.join(DATA_DIR, "players.json");
 const ACCOUNTS_FILE = path.join(DATA_DIR, "accounts.json");
+const COMMUNITY_FILE = path.join(DATA_DIR, "community.json");
 fs.mkdirSync(DATA_DIR, { recursive: true });
 
 const SYMBOLS = {
@@ -50,6 +51,98 @@ function randomTraderUsername(id){
   return username;
 }
 function randomLoginCode(){return crypto.randomBytes(9).toString("base64url").slice(0,12);}
+
+function loadCommunity(){
+  try{
+    const data=JSON.parse(fs.readFileSync(COMMUNITY_FILE,"utf8"));
+    return {
+      groups:Array.isArray(data.groups)?data.groups:[],
+      topics:Array.isArray(data.topics)?data.topics:[],
+      chat:Array.isArray(data.chat)?data.chat:[],
+      friends:data.friends&&typeof data.friends==="object"?data.friends:{},
+      messages:Array.isArray(data.messages)?data.messages:[],
+      profiles:data.profiles&&typeof data.profiles==="object"?data.profiles:{}
+    };
+  }catch{return {groups:[],topics:[],chat:[],friends:{},messages:[],profiles:{}};}
+}
+const community=loadCommunity();
+function saveCommunity(){
+  const tmp=COMMUNITY_FILE+".tmp";
+  fs.writeFileSync(tmp,JSON.stringify(community,null,2));
+  fs.renameSync(tmp,COMMUNITY_FILE);
+}
+const DEFAULT_GROUPS=[
+  ["Stock Market Basics","New to stocks? Start here.","📈"],
+  ["Ask the Community","Have a question? Ask other members.","💬"],
+  ["Stock Talk","Talk about companies and stocks.","📊"],
+  ["Options for Beginners","Learn calls, puts, expiration dates and more.","⚡"],
+  ["Stock Research","Share research and learn how people evaluate stocks.","🔎"],
+  ["Investing & Saving","Long-term investing and money conversations.","💰"],
+  ["Trading Challenges","Friendly virtual-money challenges inside Market City.","🏆"],
+  ["Market News","Talk about what is happening in the market.","📰"],
+  ["Market City","Game updates, ideas, achievements and questions.","🎮"],
+  ["Off Topic","Talk about anything else.","🏠"]
+];
+if(!community.groups.length){
+  community.groups=DEFAULT_GROUPS.map(([name,description,icon],i)=>({
+    id:"group-"+crypto.randomUUID(),name,description,icon,members:[],createdBy:"system",createdAt:Date.now()-((DEFAULT_GROUPS.length-i)*86400000)
+  }));
+  saveCommunity();
+}
+function accountForPlayer(id){
+  const p=players[id];
+  if(!p||!p.username)return null;
+  const ac=accounts[accountKey(p.username)];
+  return ac&&ac.playerId===id?ac:null;
+}
+function authenticatedPlayer(id){
+  const p=players[id],ac=accountForPlayer(id);
+  if(!p||!ac||ac.auto)return null;
+  return p;
+}
+function communityProfile(p){
+  const saved=community.profiles[p.id]||{};
+  return {
+    id:p.id,username:p.username||p.name||"Guest",displayName:String(saved.displayName||p.name||p.username||"Guest").slice(0,32),
+    bio:String(saved.bio||"").slice(0,240),avatar:String(saved.avatar||"").slice(0,500),
+    joinedAt:accountForPlayer(p.id)?.createdAt||p.createdAt||Date.now()
+  };
+}
+function communityMember(p){
+  const profile=communityProfile(p);
+  return {id:profile.id,username:profile.username,displayName:profile.displayName,avatar:profile.avatar};
+}
+function communityPublic(){
+  const groupMap=new Map(community.groups.map(g=>[g.id,g]));
+  const topicList=community.topics.slice().sort((a,b)=>b.updatedAt-a.updatedAt).slice(0,100).map(t=>({
+    ...t,groupName:groupMap.get(t.groupId)?.name||"Community",author:communityPublicUser(t.authorId)
+  }));
+  return {
+    groups:community.groups.map(g=>({...g,memberCount:g.members.length,topicsCount:community.topics.filter(t=>t.groupId===g.id).length})),
+    topics:topicList,
+    chat:community.chat.slice(-100),
+    online:sockets.size
+  };
+}
+function communityPublicUser(id){
+  const p=players[id];
+  if(!p)return {id:"",displayName:"Guest",username:"Guest",avatar:""};
+  return communityMember(p);
+}
+function requireCommunityAuth(id){
+  const p=authenticatedPlayer(id);
+  if(!p)throw new Error("Please log in with a Market City ID to do that.");
+  return p;
+}
+function requireGroupMember(p,group){
+  if(!group.members.includes(p.id))throw new Error("Join this group before posting or replying.");
+}
+function communityTrim(){
+  if(community.chat.length>300)community.chat=community.chat.slice(-300);
+  if(community.messages.length>1000)community.messages=community.messages.slice(-1000);
+  if(community.topics.length>1000)community.topics=community.topics.slice(-1000);
+}
+
 
 // Server command: reset the admin account with `npm run reset-admin`.
 function resetAdminAccount(){
@@ -362,6 +455,110 @@ if(u.pathname==="/api/unusual-volume") { if(u.searchParams.get("refresh")==="1" 
     if(u.pathname==="/api/news"){
       const symbol=(u.searchParams.get("symbol")||"").toUpperCase();
       const news=await real.getNews(symbol?[symbol]:[]);return respond(res,200,{news,source:"Alpaca"});
+    }
+
+    if(u.pathname==="/api/community"&&req.method==="GET"){
+      const id=u.searchParams.get("playerId")||"";
+      const me=idValid(id)?players[id]:null;
+      return respond(res,200,{...communityPublic(),me:me?communityMember(me):null,authenticated:!!authenticatedPlayer(id)});
+    }
+    if(u.pathname==="/api/community/profile"&&req.method==="GET"){
+      const id=u.searchParams.get("playerId")||"";
+      const target=u.searchParams.get("userId")||id;
+      const p=players[target];
+      if(!p)return respond(res,404,{error:"Member not found."});
+      return respond(res,200,{profile:communityProfile(p),friends:community.friends[target]||[]});
+    }
+    if(u.pathname==="/api/community/action"&&req.method==="POST"){
+      const b=await readBody(req);
+      const id=idValid(b.playerId)?b.playerId:"";
+      if(b.action==="chat"){
+        const p=players[id];
+        const text=String(b.text||"").trim().slice(0,500);
+        if(!text)throw new Error("Write a message first.");
+        const user=p?communityMember(p):{id:"guest",username:"Guest",displayName:"Guest",avatar:""};
+        community.chat.push({id:crypto.randomUUID(),text,createdAt:Date.now(),user});
+        communityTrim();saveCommunity();
+        return respond(res,200,{...communityPublic(),sent:true});
+      }
+      const p=requireCommunityAuth(id);
+      if(b.action==="profile"){
+        const displayName=String(b.displayName||p.name||p.username).trim().replace(/[<>]/g,"").slice(0,32);
+        const bio=String(b.bio||"").trim().replace(/[<>]/g,"").slice(0,240);
+        const avatar=String(b.avatar||"").trim().slice(0,500);
+        if(!displayName)throw new Error("Display name cannot be empty.");
+        community.profiles[p.id]={displayName,bio,avatar};
+        p.name=displayName; p.updatedAt=Date.now(); savePlayers(); saveCommunity();
+      }else if(b.action==="createGroup"){
+        const name=String(b.name||"").trim().replace(/[<>]/g,"").slice(0,50);
+        const description=String(b.description||"").trim().replace(/[<>]/g,"").slice(0,180);
+        const icon=String(b.icon||"💬").slice(0,4);
+        if(name.length<3)throw new Error("Group name must be at least 3 characters.");
+        if(community.groups.some(g=>g.name.toLowerCase()===name.toLowerCase()))throw new Error("A group with that name already exists.");
+        const g={id:"group-"+crypto.randomUUID(),name,description:description||"A new Market City community group.",icon,members:[p.id],createdBy:p.id,createdAt:Date.now()};
+        community.groups.push(g);saveCommunity();
+      }else if(b.action==="joinGroup"){
+        const g=community.groups.find(x=>x.id===String(b.groupId||""));if(!g)throw new Error("Group not found.");
+        if(!g.members.includes(p.id))g.members.push(p.id);saveCommunity();
+      }else if(b.action==="createTopic"){
+        const g=community.groups.find(x=>x.id===String(b.groupId||""));if(!g)throw new Error("Group not found.");
+        requireGroupMember(p,g);
+        const title=String(b.title||"").trim().replace(/[<>]/g,"").slice(0,100);
+        const body=String(b.body||"").trim().replace(/[<>]/g,"").slice(0,3000);
+        if(title.length<3||body.length<1)throw new Error("Add a topic title and message.");
+        const t={id:"topic-"+crypto.randomUUID(),groupId:g.id,title,body,authorId:p.id,replies:[],createdAt:Date.now(),updatedAt:Date.now()};
+        community.topics.push(t);saveCommunity();
+      }else if(b.action==="replyTopic"){
+        const t=community.topics.find(x=>x.id===String(b.topicId||""));if(!t)throw new Error("Topic not found.");
+        const g=community.groups.find(x=>x.id===t.groupId);if(g)requireGroupMember(p,g);
+        const body=String(b.body||"").trim().replace(/[<>]/g,"").slice(0,2000);
+        if(!body)throw new Error("Write a reply first.");
+        t.replies=Array.isArray(t.replies)?t.replies:[];
+        t.replies.push({id:crypto.randomUUID(),authorId:p.id,body,createdAt:Date.now()});
+        t.updatedAt=Date.now();if(t.replies.length>200)t.replies=t.replies.slice(-200);saveCommunity();
+      }else if(b.action==="friendRequest"){
+        const target=String(b.targetId||"");
+        if(!players[target]||target===p.id)throw new Error("That member is not available.");
+        const f=community.friends[p.id]||{friends:[],incoming:[],outgoing:[]};
+        const tf=community.friends[target]||{friends:[],incoming:[],outgoing:[]};
+        for(const k of ["friends","incoming","outgoing"]){f[k]=Array.isArray(f[k])?f[k]:[];tf[k]=Array.isArray(tf[k])?tf[k]:[];}
+        if(f.friends.includes(target))throw new Error("You are already friends.");
+        if(!f.outgoing.includes(target))f.outgoing.push(target);
+        if(!tf.incoming.includes(p.id))tf.incoming.push(p.id);
+        community.friends[p.id]=f;community.friends[target]=tf;saveCommunity();
+      }else if(b.action==="friendRespond"){
+        const target=String(b.targetId||""),accept=!!b.accept;
+        const f=community.friends[p.id]||{friends:[],incoming:[],outgoing:[]};
+        const tf=community.friends[target]||{friends:[],incoming:[],outgoing:[]};
+        for(const k of ["friends","incoming","outgoing"]){f[k]=Array.isArray(f[k])?f[k]:[];tf[k]=Array.isArray(tf[k])?tf[k]:[];}
+        f.incoming=f.incoming.filter(x=>x!==target);tf.outgoing=tf.outgoing.filter(x=>x!==p.id);
+        if(accept){if(!f.friends.includes(target))f.friends.push(target);if(!tf.friends.includes(p.id))tf.friends.push(p.id);}
+        community.friends[p.id]=f;community.friends[target]=tf;saveCommunity();
+      }else if(b.action==="message"){
+        const target=String(b.targetId||"");
+        if(!players[target]||target===p.id)throw new Error("Member not found.");
+        const f=community.friends[p.id]||{friends:[],incoming:[],outgoing:[]};
+        if(!f.friends.includes(target))throw new Error("Add this person as a friend before messaging.");
+        const body=String(b.body||"").trim().replace(/[<>]/g,"").slice(0,2000);
+        if(!body)throw new Error("Write a message first.");
+        community.messages.push({id:crypto.randomUUID(),from:p.id,to:target,body,createdAt:Date.now()});
+        communityTrim();saveCommunity();
+      }else if(b.action==="removeFriend"){
+        const target=String(b.targetId||"");
+        const f=community.friends[p.id]||{friends:[],incoming:[],outgoing:[]};
+        const tf=community.friends[target]||{friends:[],incoming:[],outgoing:[]};
+        f.friends=(f.friends||[]).filter(x=>x!==target);tf.friends=(tf.friends||[]).filter(x=>x!==p.id);
+        community.friends[p.id]=f;community.friends[target]=tf;saveCommunity();
+      }else throw new Error("Unknown community action.");
+      return respond(res,200,{...communityPublic(),me:communityMember(p),profile:communityProfile(p),friends:community.friends[p.id]||{friends:[],incoming:[],outgoing:[]}});
+    }
+    if(u.pathname==="/api/community/messages"&&req.method==="GET"){
+      const p=requireCommunityAuth(u.searchParams.get("playerId")||"");
+      const target=String(u.searchParams.get("userId")||"");
+      const f=community.friends[p.id]||{friends:[]};
+      if(!f.friends?.includes(target))throw new Error("You must be friends to view messages.");
+      const messages=community.messages.filter(m=>(m.from===p.id&&m.to===target)||(m.from===target&&m.to===p.id)).slice(-100);
+      return respond(res,200,{messages});
     }
     if(u.pathname==="/api/action"&&req.method==="POST"){
       const b=await readBody(req);
