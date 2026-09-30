@@ -664,3 +664,27 @@
     text-align:center!important;
   }
 }
+
+
+/* Fine-tune option-chain labels: raise headers and shift PUT labels left */
+#optionChain .chain-table thead tr:nth-child(2) th{
+  position:relative!important;
+  top:-3px!important;
+}
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(6),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(7),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(8),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(9){
+  left:-4px!important;
+}
+@media(max-width:600px){
+  #optionChain .chain-table thead tr:nth-child(2) th{
+    top:-3px!important;
+  }
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(6),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(7),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(8),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(9){
+    left:-4px!important;
+  }
+}
