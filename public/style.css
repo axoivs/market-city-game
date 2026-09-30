@@ -1323,3 +1323,54 @@
     line-height:20px!important;
   }
 }
+
+
+/* Final CALLS / PUTS header fix: fixed text, no boxes */
+#optionChain .chain-table thead{
+  position:static!important;
+  background:transparent!important;
+}
+#optionChain .chain-table thead tr:first-child{
+  position:sticky!important;
+  top:0!important;
+  z-index:100!important;
+  background:transparent!important;
+  background-color:transparent!important;
+  border:0!important;
+}
+#optionChain .chain-table thead tr:first-child th.call,
+#optionChain .chain-table thead tr:first-child th.put{
+  position:sticky!important;
+  top:0!important;
+  z-index:101!important;
+  left:auto!important;
+  right:auto!important;
+  transform:none!important;
+  background:transparent!important;
+  background-color:transparent!important;
+  border:0!important;
+  border-bottom:0!important;
+  box-shadow:none!important;
+  outline:0!important;
+  text-shadow:none!important;
+  height:24px!important;
+  padding:0!important;
+  line-height:24px!important;
+  vertical-align:middle!important;
+  text-align:center!important;
+}
+#optionChain .chain-table thead tr:first-child th.call::before,
+#optionChain .chain-table thead tr:first-child th.call::after,
+#optionChain .chain-table thead tr:first-child th.put::before,
+#optionChain .chain-table thead tr:first-child th.put::after{
+  background:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+}
+@media(max-width:600px){
+  #optionChain .chain-table thead tr:first-child th.call,
+  #optionChain .chain-table thead tr:first-child th.put{
+    height:20px!important;
+    line-height:20px!important;
+  }
+}
