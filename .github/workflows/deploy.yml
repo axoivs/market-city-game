@@ -40,5 +40,11 @@ jobs:
           cd /var/www/market-city-game
           git fetch origin main
           git reset --hard origin/main
+          test -r /home/github-runner/.market-city.env
+          set -a
+          source /home/github-runner/.market-city.env
+          set +a
+          test -n "${ALPACA_API_KEY}"
+          test -n "${ALPACA_API_SECRET}"
           pm2 restart market-city-game --update-env
           pm2 save
