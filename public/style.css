@@ -1162,3 +1162,18 @@
     top:-2px!important;
   }
 }
+
+
+/* Mobile: physically pull the entire option-chain header row upward */
+@media(max-width:800px){
+  #optionChain .chain-table thead tr:first-child{
+    transform:translateY(-6px)!important;
+  }
+  #optionChain .chain-table thead tr:first-child th.call,
+  #optionChain .chain-table thead tr:first-child th.put{
+    transform:translateY(-6px)!important;
+  }
+  #optionChain .chain-table thead tr:first-child th.put{
+    margin-left:-14px!important;
+  }
+}
