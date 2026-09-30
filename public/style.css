@@ -1197,3 +1197,13 @@
     transform:translateY(-2px)!important;
   }
 }
+
+
+/* Mobile: move option-chain header up 1px */
+@media(max-width:800px){
+  #optionChain .chain-table thead tr:first-child,
+  #optionChain .chain-table thead tr:first-child th.call,
+  #optionChain .chain-table thead tr:first-child th.put{
+    transform:translateY(-3px)!important;
+  }
+}
