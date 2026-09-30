@@ -69,3 +69,8 @@
 .community-home-link{color:#ff9547;text-decoration:none;font-weight:900;letter-spacing:.12em;text-shadow:0 0 9px #ff7b2733}
 .community-home-link:hover{color:#ffb16e;text-shadow:0 0 12px #ff7b2760}
 @media(max-width:800px){.market-footer{padding:10px 8px;font-size:8px;gap:8px}}
+
+/* Community link at the very top of the homepage */
+.community-top-link{display:flex;align-items:center;justify-content:center;height:34px;background:#090f16;border-bottom:1px solid #3a2b20;color:#ff9547;text-decoration:none;font-size:10px;font-weight:900;letter-spacing:.16em;text-shadow:0 0 8px #ff7b2755;box-shadow:inset 0 -1px 0 #ff7b2722}
+.community-top-link:hover{color:#ffb16e;text-shadow:0 0 14px #ff7b2788;background:#0c141d}
+@media(max-width:800px){.community-top-link{height:32px;font-size:9px}}
