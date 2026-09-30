@@ -248,3 +248,40 @@
   #optionChain .chain-table tbody td{height:6px!important;line-height:.85!important}
   #optionChain .option-info-btn{height:7px!important;line-height:6px!important}
 }
+
+
+/* Restore original compact mobile LAST/BID/ASK/INFO layout */
+@media(max-width:600px){
+  #optionChain .chain-table{width:auto!important;max-width:100%!important;margin:0 auto!important}
+  #optionChain .chain-table th,#optionChain .chain-table td{
+    padding:1px 0!important;
+    height:12px!important;
+    line-height:1!important;
+  }
+  #optionChain .chain-table th{font-size:5px!important}
+  #optionChain .chain-table td{font-size:6px!important}
+  #optionChain .chain-table .strike{
+    font-size:6px!important;
+    padding-left:2px!important;
+    padding-right:2px!important;
+  }
+  #optionChain .option-info-cell{padding:1px!important}
+  #optionChain .option-info-btn{
+    padding:1px!important;
+    font-size:4px!important;
+    height:10px!important;
+    line-height:1!important;
+  }
+  #optionChain .chain-table thead tr:first-child th.call,
+  #optionChain .chain-table thead tr:first-child th.put{
+    font-size:8px!important;
+    height:10px!important;
+    line-height:1!important;
+  }
+  #optionChain .chain-table thead tr:nth-child(2) th{
+    font-size:6px!important;
+    height:8px!important;
+  }
+  #optionChain .chain-table tbody tr{height:12px!important}
+  #optionChain .chain-table tbody td{height:12px!important;line-height:1!important}
+}
