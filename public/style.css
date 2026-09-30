@@ -126,3 +126,16 @@
   #optionChain .option-info-btn{padding:2px 2px;font-size:5px}
   #optionChain .chain-table .call-label,#optionChain .chain-table .put-label{transform:none}
 }
+
+
+@media(min-width:601px){
+  #optionChain{display:flex;justify-content:center;overflow:hidden;width:100%}
+  #optionChain .chain-table{width:auto;max-width:100%;margin:0 auto;table-layout:auto;border-collapse:collapse}
+  #optionChain .chain-table th,#optionChain .chain-table td{padding:3px 2px}
+  #optionChain .chain-table th{font-size:7px}
+  #optionChain .chain-table td{font-size:8px}
+  #optionChain .chain-table .strike{font-size:9px;padding-left:5px;padding-right:5px}
+  #optionChain .option-info-cell{padding-left:2px!important;padding-right:2px!important}
+  #optionChain .option-info-btn{padding:3px 3px;font-size:6px}
+  #optionChain .chain-table .call-label,#optionChain .chain-table .put-label{transform:none}
+}
