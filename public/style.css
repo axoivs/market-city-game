@@ -2008,3 +2008,124 @@
     margin-right:0!important;
   }
 }
+
+
+/* STABLE OPTION CHAIN — restore normal table layout */
+#optionChain{
+  display:block!important;
+  position:relative!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  text-align:center!important;
+  padding:0!important;
+  box-sizing:border-box!important;
+}
+#optionChain .chain-table{
+  display:table!important;
+  width:min(980px,100%)!important;
+  min-width:0!important;
+  max-width:980px!important;
+  margin:0 auto!important;
+  table-layout:fixed!important;
+  border-collapse:collapse!important;
+  position:relative!important;
+}
+#optionChain .chain-table thead{
+  display:table-header-group!important;
+  position:sticky!important;
+  top:0!important;
+  z-index:100!important;
+}
+#optionChain .chain-table .chain-main-head{
+  display:table-row!important;
+  height:22px!important;
+  background:#0a1119!important;
+}
+#optionChain .chain-table .chain-quote-head{
+  display:table-row!important;
+  height:18px!important;
+  background:#0a1119!important;
+}
+#optionChain .chain-table .chain-main-head th,
+#optionChain .chain-table .chain-quote-head th{
+  position:static!important;
+  left:auto!important;
+  right:auto!important;
+  transform:none!important;
+  background:#0a1119!important;
+  border:0!important;
+  box-shadow:none!important;
+  text-align:center!important;
+  padding:0!important;
+  white-space:nowrap!important;
+}
+#optionChain .chain-table .chain-main-head th{
+  height:22px!important;
+  line-height:22px!important;
+  font-size:12px!important;
+  font-weight:900!important;
+}
+#optionChain .chain-table .chain-main-head .call{
+  color:#59d994!important;
+}
+#optionChain .chain-table .chain-main-head .put{
+  color:#ff7180!important;
+}
+#optionChain .chain-table .chain-main-head .strike-head{
+  color:#8fa3b8!important;
+  font-size:7px!important;
+}
+#optionChain .chain-table .chain-quote-head th{
+  height:18px!important;
+  line-height:18px!important;
+  font-size:7px!important;
+  font-weight:900!important;
+}
+#optionChain .chain-table .chain-quote-head th:nth-child(-n+4){
+  color:#59d994!important;
+}
+#optionChain .chain-table .chain-quote-head th:nth-child(n+6){
+  color:#ff7180!important;
+}
+#optionChain .chain-table tbody{
+  display:table-row-group!important;
+}
+#optionChain .chain-table tbody tr{
+  display:table-row!important;
+}
+#optionChain .chain-table tbody td{
+  display:table-cell!important;
+}
+#optionChain .chain-clean-header,
+#optionChain .chain-header,
+#optionChain .chain-side-headings,
+#optionChain .chain-fixed-headings{
+  display:none!important;
+}
+/* Exact nine-column proportions: 4 calls + strike + 4 puts */
+#optionChain .chain-table th,
+#optionChain .chain-table td{
+  width:10%!important;
+  box-sizing:border-box!important;
+}
+#optionChain .chain-table th:nth-child(5),
+#optionChain .chain-table td:nth-child(5){
+  width:12%!important;
+}
+@media(max-width:600px){
+  #optionChain .chain-table{
+    width:100%!important;
+    max-width:100%!important;
+    margin:0!important;
+  }
+  #optionChain .chain-table .chain-main-head th{
+    height:20px!important;
+    line-height:20px!important;
+    font-size:10px!important;
+  }
+  #optionChain .chain-table .chain-quote-head th{
+    height:16px!important;
+    line-height:16px!important;
+    font-size:6px!important;
+  }
+}
