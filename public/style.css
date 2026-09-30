@@ -1015,3 +1015,16 @@
     left:-120px!important;
   }
 }
+
+
+/* Move PUTS LAST and BID labels farther left */
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(6),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(7){
+  left:-180px!important;
+}
+@media(max-width:600px){
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(6),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(7){
+    left:-145px!important;
+  }
+}
