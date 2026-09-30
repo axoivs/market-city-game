@@ -309,3 +309,26 @@
     -webkit-overflow-scrolling:touch;
   }
 }
+
+
+/* Scrollable live option chain */
+#optionChain{
+  max-height:420px!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:thin;
+}
+#optionChain .chain-table{margin:0 auto!important}
+#optionChain .chain-table thead{
+  position:sticky;
+  top:0;
+  z-index:5;
+}
+@media(max-width:600px){
+  #optionChain{
+    max-height:300px!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+  }
+}
