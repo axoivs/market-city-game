@@ -172,7 +172,8 @@ function renderOptionRecommendations(targetId="optionRecommendations"){
   box.querySelectorAll("[data-recommend-contract]").forEach(b=>b.onclick=()=>selectContract(b.dataset.recommendContract));
 }
 function renderChain(){
- if(!state.selected||!state.options.length){$("optionChain").innerHTML='<table class="chain-table"><thead><tr><th colspan="4" class="call">CALLS</th><th rowspan="2">STRIKE</th><th colspan="4" class="put">PUTS</th></tr><tr><th>LAST</th><th>BID</th><th>ASK</th><th>INFO</th><th class="strike-head"></th><th>LAST</th><th>BID</th><th>ASK</th><th>INFO</th></tr></thead><tbody>'+strikes.map(s=>'<tr class="'+(s===atm?"atm":"")+'">'+cell(calls.get(s),"call")+'<td class="strike">'+px(s)+'</td>'+cell(puts.get(s),"put")+'</tr>').join("")+'</tbody></table>';\n document.querySelectorAll("[data-contract]").forEach(e=>e.onclick=()=>selectContract(e.dataset.contract));
+ if(!state.selected||!state.options.length){$("optionChain").innerHTML='<table class="chain-table"><thead><tr><th colspan="4" class="call">CALLS</th><th rowspan="2">STRIKE</th><th colspan="4" class="put">PUTS</th></tr><tr><th>LAST</th><th>BID</th><th>ASK</th><th>INFO</th><th class="strike-head"></th><th>LAST</th><th>BID</th><th>ASK</th><th>INFO</th></tr></thead><tbody>'+strikes.map(s=>'<tr class="'+(s===atm?"atm":"")+'">'+cell(calls.get(s),"call")+'<td class="strike">'+px(s)+'</td>'+cell(puts.get(s),"put")+'</tr>').join("")+'</tbody></table>';
+ document.querySelectorAll("[data-contract]").forEach(e=>e.onclick=()=>selectContract(e.dataset.contract));
  document.querySelectorAll("[data-option-info]").forEach(e=>e.onclick=ev=>{ev.stopPropagation();showOptionDetails(e.dataset.optionInfo)});
  renderOptionRecommendations()
 }
