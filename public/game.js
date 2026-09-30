@@ -32,7 +32,10 @@ function stock(){return state.market.find(x=>x.symbol===state.selected)}
 function populate(){const s=$("symbol");const q=String($("tickerSearch")?.value||"").trim().toLowerCase();const list=(state.assets.length?state.assets:state.market).filter(x=>!q||x.symbol.toLowerCase().includes(q)||String(x.name||"").toLowerCase().includes(q));s.innerHTML='<option value="">SELECT SECURITY</option>'+list.map(x=>'<option value="'+esc(x.symbol)+'">'+esc(x.symbol)+" — "+esc(x.name)+"</option>").join("");s.value=state.selected}
 function renderHeader(){const p=state.player;if(!p)return;$("cash").textContent=money(p.cash);$("portfolio").textContent=money(p.portfolioValue);$("level").textContent=p.level;$("nameBtn").textContent=p.name||"GUEST"}
 function renderWatchlist(){
-  const stocks=state.market.map(s=>{
+  // Keep Market Watch in the user's saved order. Live Alpaca updates must never reorder rows.
+  const order=new Map(watchlist().map((symbol,index)=>[String(symbol).toUpperCase(),index]));
+  const stableMarket=[...state.market].sort((a,b)=>(order.get(String(a.symbol).toUpperCase())??999999)-(order.get(String(b.symbol).toUpperCase())??999999));
+  const stocks=stableMarket.map(s=>{
     const c=s.changePct>0?"up":s.changePct<0?"down":"flat";
     return '<div class="watch-row '+(s.symbol===state.selected?"active":"")+'">'+
       '<button class="watch-main" data-symbol="'+esc(s.symbol)+'"><span><span class="sym">'+esc(s.symbol)+'</span><span class="name">'+esc(s.name)+'</span></span>'+
