@@ -115,12 +115,16 @@ function communityMember(p){
 function communityPublic(){
   const groupMap=new Map(community.groups.map(g=>[g.id,g]));
   const topicList=community.topics.slice().sort((a,b)=>b.updatedAt-a.updatedAt).slice(0,100).map(t=>({
-    ...t,groupName:groupMap.get(t.groupId)?.name||"Community",author:communityPublicUser(t.authorId)
+    ...t,
+    groupName:groupMap.get(t.groupId)?.name||"Community",
+    author:communityPublicUser(t.authorId),
+    replies:(t.replies||[]).map(r=>({...r,author:communityPublicUser(r.authorId)}))
   }));
   return {
     groups:community.groups.map(g=>({...g,memberCount:g.members.length,topicsCount:community.topics.filter(t=>t.groupId===g.id).length})),
     topics:topicList,
     chat:community.chat.slice(-100),
+    friends:community.friends,
     online:sockets.size
   };
 }
