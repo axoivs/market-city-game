@@ -48,3 +48,10 @@ jobs:
           test -n "${ALPACA_API_SECRET}"
           pm2 restart market-city-game --update-env
           pm2 save
+          echo "=== PRODUCTION REVISION ==="
+          git rev-parse HEAD
+          echo "=== PM2 STATUS ==="
+          pm2 list
+          echo "=== LOCAL HEALTH ==="
+          curl --fail --silent --show-error http://127.0.0.1:3000/api/health
+          echo
