@@ -989,3 +989,14 @@
     left:-70px!important;
   }
 }
+
+
+/* Tiny right adjustment for PUTS INFO label */
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(9){
+  left:-91px!important;
+}
+@media(max-width:600px){
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(9){
+    left:-66px!important;
+  }
+}
