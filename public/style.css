@@ -332,3 +332,37 @@
     overflow-x:hidden!important;
   }
 }
+
+
+/* Fixed-size option-chain viewport: rows stay one size and overflow scrolls inside the box */
+#optionChain{
+  height:420px!important;
+  max-height:420px!important;
+  min-height:420px!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+  box-sizing:border-box!important;
+  -webkit-overflow-scrolling:touch;
+}
+#optionChain .chain-table{
+  width:max-content!important;
+  min-width:100%!important;
+  margin:0 auto!important;
+}
+#optionChain .chain-table tbody tr,
+#optionChain .chain-table tbody td{
+  height:12px!important;
+}
+@media(max-width:600px){
+  #optionChain{
+    height:300px!important;
+    max-height:300px!important;
+    min-height:300px!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+  }
+  #optionChain .chain-table tbody tr,
+  #optionChain .chain-table tbody td{
+    height:12px!important;
+  }
+}
