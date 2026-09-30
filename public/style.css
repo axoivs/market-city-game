@@ -711,3 +711,24 @@
     left:-10px!important;
   }
 }
+
+
+/* Move option-chain LAST/BID/ASK labels farther right */
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(1),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(2),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(3),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(6),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(7),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(8){
+  left:12px!important;
+}
+@media(max-width:600px){
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(1),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(2),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(3),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(6),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(7),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(8){
+    left:8px!important;
+  }
+}
