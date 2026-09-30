@@ -1971,3 +1971,23 @@
   left:0!important;
   margin-left:0!important;
 }
+
+
+/* Center the complete live option chain inside its box */
+#optionChain{
+  justify-content:center!important;
+  align-items:flex-start!important;
+  text-align:center!important;
+  padding-left:0!important;
+  padding-right:0!important;
+}
+#optionChain .chain-table{
+  margin-left:auto!important;
+  margin-right:auto!important;
+  align-self:center!important;
+}
+#optionChain .chain-clean-header{
+  left:0!important;
+  margin-left:0!important;
+  width:100%!important;
+}
