@@ -1199,3 +1199,31 @@
   top:auto!important;
   z-index:auto!important;
 }
+
+
+/* Keep CALLS and PUTS locked to one exact screen position while the chain scrolls */
+#optionChain .chain-table thead{
+  position:static!important;
+  background:transparent!important;
+}
+#optionChain .chain-table thead tr:first-child{
+  position:sticky!important;
+  top:0!important;
+  z-index:30!important;
+  background:#080d13!important;
+}
+#optionChain .chain-table thead tr:first-child th.call,
+#optionChain .chain-table thead tr:first-child th.put{
+  position:sticky!important;
+  top:0!important;
+  z-index:31!important;
+  background:#080d13!important;
+  background-color:#080d13!important;
+  border:0!important;
+  box-shadow:none!important;
+}
+/* Keep the CALLS/PUTS text itself fixed and unobstructed */
+#optionChain .chain-table thead tr:first-child th.call::after,
+#optionChain .chain-table thead tr:first-child th.put::after{
+  background:#080d13!important;
+}
