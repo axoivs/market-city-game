@@ -237,3 +237,14 @@
   #optionChain .chain-table tbody td{font-size:8px!important}
   #optionChain .chain-table .strike{font-size:9px!important}
 }
+
+
+/* Shorter option rows while keeping text readable */
+#optionChain .chain-table tbody tr{height:7px!important}
+#optionChain .chain-table tbody td{height:7px!important;padding-top:0!important;padding-bottom:0!important;line-height:.9!important}
+#optionChain .option-info-btn{height:8px!important;padding-top:0!important;padding-bottom:0!important;line-height:7px!important}
+@media(max-width:600px){
+  #optionChain .chain-table tbody tr{height:6px!important}
+  #optionChain .chain-table tbody td{height:6px!important;line-height:.85!important}
+  #optionChain .option-info-btn{height:7px!important;line-height:6px!important}
+}
