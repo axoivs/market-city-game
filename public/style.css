@@ -853,3 +853,31 @@
     padding-right:5px!important;
   }
 }
+
+
+/* Move LAST/BID/ASK labels much farther left */
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(1),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(2),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(3),
+#optionChain .chain-table thead tr:nth-child(6),
+#optionChain .chain-table thead tr:nth-child(7),
+#optionChain .chain-table thead tr:nth-child(8){
+  left:22px!important;
+}
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(6),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(7),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(8){
+  left:-28px!important;
+}
+@media(max-width:600px){
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(1),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(2),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(3){
+    left:-8px!important;
+  }
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(6),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(7),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(8){
+    left:-22px!important;
+  }
+}
