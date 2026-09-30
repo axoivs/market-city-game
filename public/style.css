@@ -638,3 +638,29 @@
     line-height:12px!important;
   }
 }
+
+
+/* Align option-chain LAST/BID/ASK/INFO labels directly over their columns */
+#optionChain .chain-table thead tr:nth-child(2) th{
+  text-align:center!important;
+  vertical-align:middle!important;
+}
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(1),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(2),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(3),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(4),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(6),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(7),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(8),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(9){
+  position:relative!important;
+  left:0!important;
+  transform:none!important;
+}
+@media(max-width:600px){
+  #optionChain .chain-table thead tr:nth-child(2) th{
+    padding-left:3px!important;
+    padding-right:3px!important;
+    text-align:center!important;
+  }
+}
