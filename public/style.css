@@ -285,3 +285,27 @@
   #optionChain .chain-table tbody tr{height:12px!important}
   #optionChain .chain-table tbody td{height:12px!important;line-height:1!important}
 }
+
+
+/* Scrollable live option chain */
+#optionChain{
+  max-height:420px!important;
+  overflow:auto!important;
+  -webkit-overflow-scrolling:touch;
+  scrollbar-width:thin;
+}
+#optionChain .chain-table{
+  margin:0 auto!important;
+}
+#optionChain .chain-table thead{
+  position:sticky;
+  top:0;
+  z-index:5;
+}
+@media(max-width:600px){
+  #optionChain{
+    max-height:300px!important;
+    overflow:auto!important;
+    -webkit-overflow-scrolling:touch;
+  }
+}
