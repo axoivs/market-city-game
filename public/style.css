@@ -1752,3 +1752,96 @@
     font-size:7px!important;
   }
 }
+
+
+/* FINAL CLEAN OPTION CHAIN HEADER — independent of table columns */
+#optionChain .chain-clean-header{
+  position:sticky!important;
+  top:0!important;
+  left:0!important;
+  width:100%!important;
+  height:38px!important;
+  z-index:2000!important;
+  display:block!important;
+  margin:0!important;
+  padding:0!important;
+  background:#080d13!important;
+  border:0!important;
+  box-shadow:0 1px 0 #1b2a38!important;
+  pointer-events:none!important;
+}
+#optionChain .chain-clean-header span{
+  position:absolute!important;
+  display:block!important;
+  width:60px!important;
+  height:19px!important;
+  margin:0!important;
+  padding:0!important;
+  top:0!important;
+  transform:translateX(-50%)!important;
+  text-align:center!important;
+  line-height:19px!important;
+  font-size:8px!important;
+  font-weight:900!important;
+  letter-spacing:.06em!important;
+  color:#8fa3b8!important;
+  background:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+  outline:0!important;
+  white-space:nowrap!important;
+}
+#optionChain .chain-clean-header .cc-calls,
+#optionChain .chain-clean-header .cc-puts{
+  top:0!important;
+  width:100px!important;
+  font-size:13px!important;
+  line-height:19px!important;
+}
+#optionChain .chain-clean-header .cc-calls{
+  left:27%!important;
+  color:#59d994!important;
+}
+#optionChain .chain-clean-header .cc-puts{
+  left:79%!important;
+  color:#ff7180!important;
+}
+#optionChain .chain-clean-header .cc-call-last{left:9.5%!important;top:19px!important;color:#59d994!important}
+#optionChain .chain-clean-header .cc-call-bid{left:23.5%!important;top:19px!important;color:#59d994!important}
+#optionChain .chain-clean-header .cc-call-ask{left:37.5%!important;top:19px!important;color:#59d994!important}
+#optionChain .chain-clean-header .cc-put-last{left:66.5%!important;top:19px!important;color:#ff7180!important}
+#optionChain .chain-clean-header .cc-put-bid{left:76.5%!important;top:19px!important;color:#ff7180!important}
+#optionChain .chain-clean-header .cc-put-ask{left:86.5%!important;top:19px!important;color:#ff7180!important}
+#optionChain .chain-header,
+#optionChain .chain-side-headings,
+#optionChain .chain-fixed-headings{
+  display:none!important;
+}
+#optionChain .chain-table thead{
+  display:none!important;
+}
+@media(max-width:600px){
+  #optionChain .chain-clean-header{
+    height:34px!important;
+  }
+  #optionChain .chain-clean-header span{
+    width:42px!important;
+    height:17px!important;
+    line-height:17px!important;
+    font-size:7px!important;
+  }
+  #optionChain .chain-clean-header .cc-calls,
+  #optionChain .chain-clean-header .cc-puts{
+    width:70px!important;
+    font-size:10px!important;
+    line-height:17px!important;
+  }
+  #optionChain .chain-clean-header .cc-call-last,
+  #optionChain .chain-clean-header .cc-call-bid,
+  #optionChain .chain-clean-header .cc-call-ask,
+  #optionChain .chain-clean-header .cc-put-last,
+  #optionChain .chain-clean-header .cc-put-bid,
+  #optionChain .chain-clean-header .cc-put-ask{
+    top:17px!important;
+  }
+}
