@@ -366,3 +366,106 @@
     height:12px!important;
   }
 }
+
+
+/* Mobile option-chain polish */
+@media(max-width:600px){
+  #optionChain{
+    height:300px!important;
+    max-height:300px!important;
+    min-height:300px!important;
+    width:100%!important;
+    max-width:100%!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    border:1px solid #263849!important;
+    border-radius:8px!important;
+    background:#080d13!important;
+    box-sizing:border-box!important;
+    padding:4px 2px!important;
+    scrollbar-width:thin;
+  }
+
+  #optionChain .chain-table{
+    width:100%!important;
+    min-width:0!important;
+    max-width:100%!important;
+    table-layout:fixed!important;
+    border-collapse:separate!important;
+    border-spacing:0 2px!important;
+  }
+
+  #optionChain .chain-table th,
+  #optionChain .chain-table td{
+    white-space:nowrap!important;
+    overflow:hidden!important;
+    text-overflow:clip!important;
+    text-align:center!important;
+    vertical-align:middle!important;
+    padding:0 1px!important;
+  }
+
+  #optionChain .chain-table thead{
+    position:sticky!important;
+    top:-4px!important;
+    z-index:10!important;
+    background:#080d13!important;
+  }
+
+  #optionChain .chain-table thead tr:first-child th.call,
+  #optionChain .chain-table thead tr:first-child th.put{
+    font-size:10px!important;
+    font-weight:900!important;
+    letter-spacing:.06em!important;
+    height:18px!important;
+    padding:2px 0!important;
+    background:#101923!important;
+  }
+
+  #optionChain .chain-table thead tr:nth-child(2) th{
+    font-size:7px!important;
+    font-weight:800!important;
+    height:16px!important;
+    color:#9eb0c2!important;
+  }
+
+  #optionChain .chain-table tbody tr{
+    height:18px!important;
+  }
+
+  #optionChain .chain-table tbody td{
+    height:18px!important;
+    font-size:8px!important;
+    line-height:1!important;
+  }
+
+  #optionChain .chain-table .strike{
+    font-size:9px!important;
+    font-weight:900!important;
+    padding:0 3px!important;
+    background:#111a24!important;
+    border-radius:3px!important;
+  }
+
+  #optionChain .option-info-cell{
+    padding:0 1px!important;
+  }
+
+  #optionChain .option-info-btn{
+    min-width:26px!important;
+    height:16px!important;
+    padding:0 3px!important;
+    font-size:6px!important;
+    font-weight:900!important;
+    line-height:14px!important;
+    border-radius:3px!important;
+  }
+
+  #optionChain .atm td{
+    background:#14202c!important;
+  }
+
+  #optionChain .atm .strike{
+    outline:1px solid #526779!important;
+  }
+}
