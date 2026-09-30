@@ -944,3 +944,20 @@
     left:-45px!important;
   }
 }
+
+
+/* Move PUTS LAST/BID/ASK/INFO labels even farther left */
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(6),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(7),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(8),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(9){
+  left:-85px!important;
+}
+@media(max-width:600px){
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(6),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(7),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(8),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(9){
+    left:-65px!important;
+  }
+}
