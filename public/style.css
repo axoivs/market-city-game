@@ -1374,3 +1374,58 @@
     line-height:20px!important;
   }
 }
+
+
+/* Definitive clean CALLS / PUTS headings: fixed inside option-chain viewport */
+#optionChain{
+  position:relative!important;
+}
+#optionChain .chain-fixed-headings{
+  position:sticky!important;
+  top:0!important;
+  z-index:200!important;
+  height:24px!important;
+  width:100%!important;
+  display:grid!important;
+  grid-template-columns:4fr 1fr 4fr!important;
+  align-items:center!important;
+  pointer-events:none!important;
+  background:#080d13!important;
+}
+#optionChain .chain-fixed-calls,
+#optionChain .chain-fixed-puts{
+  display:block!important;
+  position:static!important;
+  transform:none!important;
+  margin:0!important;
+  padding:0!important;
+  background:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+  outline:0!important;
+  text-align:center!important;
+  font-size:13px!important;
+  font-weight:900!important;
+  line-height:24px!important;
+  letter-spacing:.08em!important;
+}
+#optionChain .chain-fixed-calls{color:#59d994!important}
+#optionChain .chain-fixed-puts{color:#ff7180!important}
+#optionChain .chain-old-head,
+#optionChain .chain-old-subhead{
+  display:none!important;
+}
+#optionChain .chain-table thead{
+  display:none!important;
+}
+@media(max-width:600px){
+  #optionChain .chain-fixed-headings{
+    height:20px!important;
+    grid-template-columns:4fr 1fr 4fr!important;
+  }
+  #optionChain .chain-fixed-calls,
+  #optionChain .chain-fixed-puts{
+    font-size:11px!important;
+    line-height:20px!important;
+  }
+}
