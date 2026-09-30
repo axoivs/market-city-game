@@ -774,3 +774,24 @@
     left:34px!important;
   }
 }
+
+
+/* Nudge LAST/BID/ASK labels slightly farther right */
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(1),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(2),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(3),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(6),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(7),
+#optionChain .chain-table thead tr:nth-child(2) th:nth-child(8){
+  left:54px!important;
+}
+@media(max-width:600px){
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(1),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(2),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(3),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(6),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(7),
+  #optionChain .chain-table thead tr:nth-child(2) th:nth-child(8){
+    left:40px!important;
+  }
+}
