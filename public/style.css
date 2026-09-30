@@ -63,3 +63,9 @@
 .formula-intro h3{margin:4px 0;font-size:16px;letter-spacing:.08em}
 .formula-intro p{margin:6px 0 0;color:#8295a8;font-size:10px}
 .option-formula-drawer #optionFormulaBody .option-recommendations{margin:0;border:0;background:transparent;padding:0}
+
+/* Community link */
+.market-footer{display:flex;justify-content:center;align-items:center;gap:12px;padding:8px 14px;color:#53687d;font-size:9px;border-top:1px solid #172331;background:#09111a}
+.community-home-link{color:#ff9547;text-decoration:none;font-weight:900;letter-spacing:.12em;text-shadow:0 0 9px #ff7b2733}
+.community-home-link:hover{color:#ffb16e;text-shadow:0 0 12px #ff7b2760}
+@media(max-width:800px){.market-footer{padding:10px 8px;font-size:8px;gap:8px}}
