@@ -1991,3 +1991,20 @@
   margin-left:0!important;
   width:100%!important;
 }
+
+
+/* Shift the complete option chain substantially left */
+#optionChain{
+  justify-content:flex-start!important;
+}
+#optionChain .chain-table{
+  margin-left:6%!important;
+  margin-right:0!important;
+  align-self:flex-start!important;
+}
+@media(max-width:600px){
+  #optionChain .chain-table{
+    margin-left:1%!important;
+    margin-right:0!important;
+  }
+}
