@@ -1952,3 +1952,22 @@
     font-size:10px!important;
   }
 }
+
+
+/* Align the live option chain flush to the far left of its box */
+#optionChain{
+  justify-content:flex-start!important;
+  align-items:flex-start!important;
+  text-align:left!important;
+  padding-left:0!important;
+  padding-right:0!important;
+}
+#optionChain .chain-table{
+  margin-left:0!important;
+  margin-right:0!important;
+  align-self:flex-start!important;
+}
+#optionChain .chain-clean-header{
+  left:0!important;
+  margin-left:0!important;
+}
