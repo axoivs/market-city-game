@@ -1184,3 +1184,18 @@
     line-height:16px!important;
   }
 }
+
+
+/* CALLS and PUTS are not sticky; only the option data may scroll normally */
+#optionChain .chain-table thead{
+  position:static!important;
+  top:auto!important;
+  z-index:auto!important;
+  background:transparent!important;
+}
+#optionChain .chain-table thead tr:first-child th.call,
+#optionChain .chain-table thead tr:first-child th.put{
+  position:static!important;
+  top:auto!important;
+  z-index:auto!important;
+}
