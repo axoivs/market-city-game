@@ -93,4 +93,4 @@
 .option-detail-grid b{font-size:11px}
 
 /* Pull the put-side chain labels farther left toward the strike column. */
-.chain-table thead tr:nth-child(2) th:nth-child(6),.chain-table thead tr:nth-child(2) th:nth-child(7),.chain-table thead tr:nth-child(2) th:nth-child(8),.chain-table thead tr:nth-child(2) th:nth-child(9){transform:translateX(-100px)}
+.chain-table thead tr:nth-child(2) th:nth-child(6),.chain-table thead tr:nth-child(2) th:nth-child(7),.chain-table thead tr:nth-child(2) th:nth-child(8),.chain-table thead tr:nth-child(2) th:nth-child(9){transform:translateX(-150px)}
