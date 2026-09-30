@@ -531,3 +531,39 @@
     padding:0 1px!important;
   }
 }
+
+
+/* Mobile option chain: add breathing room between columns */
+@media(max-width:600px){
+  #optionChain .chain-table{
+    border-spacing:3px 2px!important;
+    table-layout:fixed!important;
+  }
+  #optionChain .chain-table th,
+  #optionChain .chain-table td{
+    padding-left:3px!important;
+    padding-right:3px!important;
+  }
+  #optionChain .chain-table th:nth-child(5),
+  #optionChain .chain-table td:nth-child(5){
+    width:12%!important;
+  }
+  #optionChain .chain-table th:nth-child(1),
+  #optionChain .chain-table td:nth-child(1),
+  #optionChain .chain-table th:nth-child(2),
+  #optionChain .chain-table td:nth-child(2),
+  #optionChain .chain-table th:nth-child(3),
+  #optionChain .chain-table td:nth-child(3),
+  #optionChain .chain-table th:nth-child(4),
+  #optionChain .chain-table td:nth-child(4),
+  #optionChain .chain-table th:nth-child(6),
+  #optionChain .chain-table td:nth-child(6),
+  #optionChain .chain-table th:nth-child(7),
+  #optionChain .chain-table td:nth-child(7),
+  #optionChain .chain-table th:nth-child(8),
+  #optionChain .chain-table td:nth-child(8),
+  #optionChain .chain-table th:nth-child(9),
+  #optionChain .chain-table td:nth-child(9){
+    width:11%!important;
+  }
+}
