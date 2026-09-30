@@ -174,3 +174,19 @@
   #optionChain .chain-table .strike{font-size:5px!important;padding:0 1px!important}
   #optionChain .option-info-btn{height:8px!important;line-height:8px!important;font-size:3.5px!important;padding:0 1px!important}
 }
+
+
+/* Keep option values readable; tighten only row/column spacing */
+#optionChain .chain-table th,#optionChain .chain-table td{padding:0 1px!important;height:10px!important;line-height:1.05!important}
+#optionChain .chain-table th{font-size:7px!important;letter-spacing:0!important}
+#optionChain .chain-table td{font-size:8px!important;letter-spacing:0!important}
+#optionChain .chain-table .strike{font-size:9px!important;padding:0 3px!important}
+#optionChain .option-info-cell{padding:0 1px!important}
+#optionChain .option-info-btn{padding:1px 2px!important;height:10px!important;font-size:5px!important;line-height:8px!important}
+@media(max-width:600px){
+  #optionChain .chain-table th,#optionChain .chain-table td{padding:0 1px!important;height:9px!important}
+  #optionChain .chain-table th{font-size:6px!important}
+  #optionChain .chain-table td{font-size:7px!important}
+  #optionChain .chain-table .strike{font-size:8px!important;padding:0 2px!important}
+  #optionChain .option-info-btn{height:9px!important;font-size:4px!important;padding:1px!important;line-height:7px!important}
+}
