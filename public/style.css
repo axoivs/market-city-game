@@ -1015,3 +1015,29 @@
   border:0!important;
   box-shadow:none!important;
 }
+
+
+/* Keep CALLS and PUTS fixed in place while option rows scroll */
+#optionChain{
+  position:relative!important;
+}
+#optionChain .chain-table thead{
+  position:sticky!important;
+  top:0!important;
+  z-index:100!important;
+}
+#optionChain .chain-table thead tr:first-child{
+  position:sticky!important;
+  top:0!important;
+  z-index:101!important;
+}
+#optionChain .chain-table thead tr:first-child th.call,
+#optionChain .chain-table thead tr:first-child th.put,
+#optionChain .chain-table thead tr:first-child th{
+  position:sticky!important;
+  top:0!important;
+  z-index:102!important;
+  background:transparent!important;
+  border:0!important;
+  box-shadow:none!important;
+}
