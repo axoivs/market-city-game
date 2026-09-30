@@ -144,8 +144,9 @@ function optionRecommendationScore(o,side,ctx){
   const breakeven=side==="call"?strike+price:strike-price;
   return {o,side,score,dte,price,spread,breakeven,maxLoss:price*(Number(o.size)||100),deltaFit,liqScore};
 }
-function renderOptionRecommendations(){
-  const box=$("optionRecommendations");
+function renderOptionRecommendations(targetId="optionRecommendations"){
+  const target=targetId;
+  const box=$(target);
   if(!box)return;
   if(!state.selected||!state.options.length){box.innerHTML="";return}
   const valid=state.options.filter(o=>Number(o.ask)>0||Number(o.last)>0);
@@ -341,7 +342,10 @@ async function drawer(screen,force=false){
   const d=$("drawer"),b=$("drawerContent");
   d.classList.remove("hidden");
   $("drawerTitle").textContent=screen==="radar"?"MARKET RADAR":screen.toUpperCase();
-  if(screen==="profile"){
+  if(screen==="option-formula"){
+    b.innerHTML='<div class="drawer-body option-formula-drawer"><div class="formula-intro"><div class="eyebrow">OPTIONS</div><h3>OPTION FORMULA</h3><p>Objective chain score — not a guaranteed-return prediction.</p></div><div id="optionFormulaBody"></div></div>';
+    renderOptionRecommendations("optionFormulaBody");
+  }else if(screen==="profile"){
     const p=state.player||{},s=p.stats||{};
     const pl=v=>'<span class="'+(Number(v)>0?"up":Number(v)<0?"down":"flat")+'">'+(Number(v)>0?"+":"")+money(v)+'</span>';
     const pct=v=>'<span class="'+(Number(v)>0?"up":Number(v)<0?"down":"flat")+'">'+(Number(v)>0?"+":"")+Number(v||0).toFixed(2)+'%</span>';
