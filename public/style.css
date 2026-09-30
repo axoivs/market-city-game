@@ -74,3 +74,6 @@
 .community-top-link{display:flex;align-items:center;justify-content:center;height:34px;background:#090f16;border-bottom:1px solid #3a2b20;color:#ff9547;text-decoration:none;font-size:10px;font-weight:900;letter-spacing:.16em;text-shadow:0 0 8px #ff7b2755;box-shadow:inset 0 -1px 0 #ff7b2722}
 .community-top-link:hover{color:#ffb16e;text-shadow:0 0 14px #ff7b2788;background:#0c141d}
 @media(max-width:800px){.community-top-link{height:32px;font-size:9px}}
+
+/* Desktop bottom navigation stays fixed at the bottom; Community is top-only. */
+@media(min-width:801px){body{padding-bottom:44px}.bottom-nav{position:fixed;left:0;right:0;bottom:0;z-index:25;height:44px}.market-footer{display:none}}
