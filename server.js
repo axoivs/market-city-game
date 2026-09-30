@@ -464,7 +464,7 @@ if(u.pathname==="/api/unusual-volume") { if(u.searchParams.get("refresh")==="1" 
     if(u.pathname==="/api/community"&&req.method==="GET"){
       const id=u.searchParams.get("playerId")||"";
       const me=idValid(id)?players[id]:null;
-      return respond(res,200,{...communityPublic(),me:me?communityMember(me):null,authenticated:!!authenticatedPlayer(id)});
+      return respond(res,200,{...communityPublic(),me:me?communityMember(me):null,authenticated:!!authenticatedPlayer(id),friends:community.friends[id]||{friends:[],incoming:[],outgoing:[]}});
     }
     if(u.pathname==="/api/community/profile"&&req.method==="GET"){
       const id=u.searchParams.get("playerId")||"";
