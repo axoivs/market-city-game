@@ -94,3 +94,22 @@
 
 /* Pull the put-side chain labels farther left toward the strike column. */
 .chain-table thead tr:nth-child(2) th:nth-child(6),.chain-table thead tr:nth-child(2) th:nth-child(7),.chain-table thead tr:nth-child(2) th:nth-child(8),.chain-table thead tr:nth-child(2) th:nth-child(9){transform:translateX(-210px)}
+
+
+@media(max-width:600px){
+  #optionChain{width:100%;max-width:100%;overflow-x:hidden}
+  #optionChain .chain-table{width:100%;table-layout:fixed;font-size:8px}
+  #optionChain .chain-table th,#optionChain .chain-table td{padding:3px 1px;white-space:nowrap}
+  #optionChain .chain-table th{font-size:7px;letter-spacing:0}
+  #optionChain .chain-table .strike{font-size:9px;font-weight:900}
+  #optionChain .option-info-btn{padding:3px 2px;font-size:6px}
+  #optionChain .chain-table th:nth-child(1),#optionChain .chain-table td:nth-child(1),
+  #optionChain .chain-table th:nth-child(2),#optionChain .chain-table td:nth-child(2),
+  #optionChain .chain-table th:nth-child(3),#optionChain .chain-table td:nth-child(3),
+  #optionChain .chain-table th:nth-child(6),#optionChain .chain-table td:nth-child(6),
+  #optionChain .chain-table th:nth-child(7),#optionChain .chain-table td:nth-child(7),
+  #optionChain .chain-table th:nth-child(8),#optionChain .chain-table td:nth-child(8){width:10%}
+  #optionChain .chain-table th:nth-child(4),#optionChain .chain-table td:nth-child(4),
+  #optionChain .chain-table th:nth-child(9),#optionChain .chain-table td:nth-child(9){width:8%}
+  #optionChain .chain-table th:nth-child(5),#optionChain .chain-table td:nth-child(5){width:12%}
+}
