@@ -1,6 +1,6 @@
 # Market City
 
-Market City is a 2D multiplayer stock-market game built around **real Alpaca market data**.
+Market City is a 2 stock-market game built around **real Alpaca market data**.
 
 ## Data architecture
 
