@@ -469,3 +469,65 @@
     outline:1px solid #526779!important;
   }
 }
+
+
+/* Mobile option chain: use full screen width cleanly */
+@media(max-width:600px){
+  #optionChain{
+    width:100%!important;
+    max-width:none!important;
+    box-sizing:border-box!important;
+    padding:4px 0!important;
+  }
+  #optionChain .chain-table{
+    width:100%!important;
+    min-width:100%!important;
+    max-width:100%!important;
+    table-layout:fixed!important;
+    margin:0!important;
+  }
+  #optionChain .chain-table th,
+  #optionChain .chain-table td{
+    padding-left:2px!important;
+    padding-right:2px!important;
+    text-align:center!important;
+  }
+  /* Four equal columns on each side of the strike */
+  #optionChain .chain-table th.call,
+  #optionChain .chain-table th.put{width:auto!important}
+  #optionChain .chain-table th,
+  #optionChain .chain-table td{min-width:0!important}
+  #optionChain .chain-table th:nth-child(5),
+  #optionChain .chain-table td:nth-child(5){
+    width:11%!important;
+  }
+  #optionChain .chain-table th:nth-child(1),
+  #optionChain .chain-table td:nth-child(1),
+  #optionChain .chain-table th:nth-child(2),
+  #optionChain .chain-table td:nth-child(2),
+  #optionChain .chain-table th:nth-child(3),
+  #optionChain .chain-table td:nth-child(3),
+  #optionChain .chain-table th:nth-child(4),
+  #optionChain .chain-table td:nth-child(4),
+  #optionChain .chain-table th:nth-child(6),
+  #optionChain .chain-table td:nth-child(6),
+  #optionChain .chain-table th:nth-child(7),
+  #optionChain .chain-table td:nth-child(7),
+  #optionChain .chain-table th:nth-child(8),
+  #optionChain .chain-table td:nth-child(8),
+  #optionChain .chain-table th:nth-child(9),
+  #optionChain .chain-table td:nth-child(9){
+    width:11.125%!important;
+  }
+  #optionChain .chain-table .strike{
+    font-size:9px!important;
+    padding-left:1px!important;
+    padding-right:1px!important;
+  }
+  #optionChain .option-info-btn{
+    min-width:0!important;
+    width:100%!important;
+    max-width:34px!important;
+    padding:0 1px!important;
+  }
+}
