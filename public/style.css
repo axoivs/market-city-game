@@ -1252,3 +1252,39 @@
     box-shadow:none!important;
   }
 }
+
+
+/* Keep CALLS / STRIKE / PUTS locked to the option-chain top, never the page bottom */
+#optionChain{
+  position:relative!important;
+  overflow-y:auto!important;
+  overflow-x:hidden!important;
+}
+#optionChain .chain-table{
+  position:relative!important;
+}
+#optionChain .chain-table thead{
+  position:static!important;
+}
+#optionChain .chain-table thead tr:first-child{
+  position:sticky!important;
+  top:0!important;
+  z-index:1000!important;
+}
+#optionChain .chain-table thead tr:first-child th{
+  position:sticky!important;
+  top:0!important;
+  z-index:1001!important;
+}
+@media(max-width:800px){
+  #optionChain .chain-table thead tr:first-child{
+    position:sticky!important;
+    top:0!important;
+    z-index:1000!important;
+  }
+  #optionChain .chain-table thead tr:first-child th{
+    position:sticky!important;
+    top:0!important;
+    z-index:1001!important;
+  }
+}
