@@ -1339,3 +1339,12 @@
     padding-top:2px!important;
   }
 }
+
+
+/* Mobile: move CALLS and PUTS label boxes up 2px */
+@media(max-width:800px){
+  #optionChain .chain-table thead tr:first-child th.call,
+  #optionChain .chain-table thead tr:first-child th.put{
+    top:-2px!important;
+  }
+}
