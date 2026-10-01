@@ -1348,3 +1348,16 @@
     top:-2px!important;
   }
 }
+
+
+/* Mobile: move the complete CALLS / STRIKE / PUTS header row up 2px as one unit */
+@media(max-width:800px){
+  #optionChain .chain-table thead tr:first-child{
+    transform:translateY(-2px)!important;
+  }
+  #optionChain .chain-table thead tr:first-child th.call,
+  #optionChain .chain-table thead tr:first-child th.put,
+  #optionChain .chain-table thead tr:first-child th:nth-child(5){
+    top:-2px!important;
+  }
+}
