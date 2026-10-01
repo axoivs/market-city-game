@@ -1382,3 +1382,13 @@
     padding-top:3px!important;
   }
 }
+
+
+/* Mobile: move only the visible STRIKE text down 3px without moving its box */
+@media(max-width:800px){
+  #optionChain .chain-table thead tr:first-child th:nth-child(5){
+    text-indent:0!important;
+    line-height:21px!important;
+    padding-top:0!important;
+  }
+}
