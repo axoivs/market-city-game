@@ -187,7 +187,7 @@ function renderChain(){
    return '<td class="'+cls+'"'+attr+'>'+px(o.last)+'</td><td class="'+cls+'"'+attr+'>'+px(o.bid)+'</td><td class="'+cls+'"'+attr+'>'+px(o.ask)+'</td><td class="option-info-cell"><button type="button" class="option-info-btn" data-option-info="'+esc(o.contractSymbol)+'">INFO</button></td>'
  }
  const heads='<th class="chain-label-hidden"></th><th class="chain-label-hidden"></th><th class="chain-label-hidden"></th><th class="chain-label-hidden"></th>';
- $("optionChain").innerHTML='<table class="chain-table"><thead><tr><th colspan="4" class="call">CALLS</th><th rowspan="2">STRIKE</th><th colspan="4" class="put">PUTS</th></tr><tr>'+heads+'<th class="strike-head"></th>'+heads+'</tr></thead><tbody>'+strikes.map(s=>'<tr class="'+(s===atm?"atm":"")+'">'+cell(calls.get(s),"call")+'<td class="strike">'+px(s)+'</td>'+cell(puts.get(s),"put")+'</tr>').join("")+'</tbody></table>';
+ $("optionChain").innerHTML='<table class="chain-table"><thead><tr><th colspan="4" class="call">CALLS</th><th rowspan="2"><span class="strike-header-text">STRIKE</span></th><th colspan="4" class="put">PUTS</th></tr><tr>'+heads+'<th class="strike-head"></th>'+heads+'</tr></thead><tbody>'+strikes.map(s=>'<tr class="'+(s===atm?"atm":"")+'">'+cell(calls.get(s),"call")+'<td class="strike">'+px(s)+'</td>'+cell(puts.get(s),"put")+'</tr>').join("")+'</tbody></table>';
  document.querySelectorAll("[data-contract]").forEach(e=>e.onclick=()=>selectContract(e.dataset.contract));
  document.querySelectorAll("[data-option-info]").forEach(e=>e.onclick=ev=>{ev.stopPropagation();showOptionDetails(e.dataset.optionInfo)});
  renderOptionRecommendations()
