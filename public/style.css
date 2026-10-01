@@ -1392,3 +1392,13 @@
     padding-top:0!important;
   }
 }
+
+
+/* Mobile: precisely move only the STRIKE word down 3px */
+@media(max-width:800px){
+  #optionChain .chain-table .strike-header-text{
+    display:inline-block!important;
+    transform:translateY(3px)!important;
+    position:relative!important;
+  }
+}
