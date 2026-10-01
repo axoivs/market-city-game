@@ -1288,3 +1288,45 @@
     z-index:1001!important;
   }
 }
+
+
+/* Mobile fix: keep CALLS / STRIKE / PUTS at the actual top of the option-chain viewport */
+@media(max-width:800px){
+  #optionChain{
+    position:relative!important;
+    overflow-y:auto!important;
+    overflow-x:hidden!important;
+    isolation:isolate!important;
+  }
+  #optionChain .chain-table{
+    position:relative!important;
+    margin-top:0!important;
+  }
+  #optionChain .chain-table thead{
+    position:static!important;
+    transform:none!important;
+  }
+  #optionChain .chain-table thead tr:first-child{
+    position:sticky!important;
+    top:0!important;
+    transform:none!important;
+    margin:0!important;
+    padding:0!important;
+    z-index:3000!important;
+    background:#0b1118!important;
+  }
+  #optionChain .chain-table thead tr:first-child th,
+  #optionChain .chain-table thead tr:first-child th.call,
+  #optionChain .chain-table thead tr:first-child th.put,
+  #optionChain .chain-table thead tr:first-child th:nth-child(5){
+    position:sticky!important;
+    top:0!important;
+    transform:none!important;
+    margin:0!important;
+    padding-top:0!important;
+    z-index:3001!important;
+    background:#0b1118!important;
+    background-color:#0b1118!important;
+    vertical-align:top!important;
+  }
+}
