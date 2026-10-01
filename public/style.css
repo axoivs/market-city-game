@@ -1332,13 +1332,10 @@
 }
 
 
-/* Mobile: move CALLS / STRIKE / PUTS header box up 2px */
+/* Mobile: keep the STRIKE header box fixed and move only the STRIKE text down 2px */
 @media(max-width:800px){
-  #optionChain .chain-table thead tr:first-child,
-  #optionChain .chain-table thead tr:first-child th,
-  #optionChain .chain-table thead tr:first-child th.call,
-  #optionChain .chain-table thead tr:first-child th.put,
   #optionChain .chain-table thead tr:first-child th:nth-child(5){
     top:-2px!important;
+    padding-top:2px!important;
   }
 }
