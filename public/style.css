@@ -1217,3 +1217,38 @@
     transform:translateY(-4px)!important;
   }
 }
+
+
+/* Mobile option-chain header: raise STRIKE and remove the gap/box beneath it */
+@media(max-width:800px){
+  #optionChain .chain-table thead tr:first-child th:nth-child(5){
+    position:relative!important;
+    top:-3px!important;
+    vertical-align:top!important;
+    padding-top:0!important;
+    padding-bottom:0!important;
+    height:22px!important;
+    line-height:18px!important;
+    background:#0b1118!important;
+    border:0!important;
+    box-shadow:none!important;
+  }
+  #optionChain .chain-table thead tr:nth-child(2){
+    height:0!important;
+    max-height:0!important;
+    line-height:0!important;
+    padding:0!important;
+    margin:0!important;
+  }
+  #optionChain .chain-table thead tr:nth-child(2) th{
+    display:none!important;
+    height:0!important;
+    max-height:0!important;
+    padding:0!important;
+    margin:0!important;
+    border:0!important;
+    line-height:0!important;
+    background:transparent!important;
+    box-shadow:none!important;
+  }
+}
