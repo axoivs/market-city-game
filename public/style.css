@@ -1410,3 +1410,11 @@
     transform:translateY(6px)!important;
   }
 }
+
+
+/* Mobile: move only the STRIKE word another 2px down */
+@media(max-width:800px){
+  #optionChain .chain-table .strike-header-text{
+    transform:translateY(8px)!important;
+  }
+}
