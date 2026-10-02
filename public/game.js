@@ -29,7 +29,12 @@ function handle(m){
 function apply(m){if(m.player){state.player=m.player;if(m.player.username&&Array.isArray(m.player.watchlist))state.watchlist=[...new Set([...m.player.watchlist,"AAPL"])]}if(m.market)state.market=m.market.filter(x=>watchHas(x.symbol));if(m.leaderboard)state.leaderboard=m.leaderboard;if(Number.isFinite(m.online))state.online=m.online;if(typeof m.marketReady==="boolean")state.marketReady=m.marketReady;renderAll()}
 async function bootstrap(){try{apply(await api("/api/bootstrap?playerId="+encodeURIComponent(playerId)+"&_="+Date.now()));if(!watchHas("AAPL")){watchlist().push("AAPL");saveWatchlistLocal()}try{const a=await api("/api/assets");state.assets=a.assets||[]}catch(e){console.error("Alpaca asset universe:",e.message)}await selectSymbol("AAPL",true);connect();renderAll()}catch(e){toast(e.message);setTimeout(bootstrap,4000)}}
 function stock(){return state.market.find(x=>x.symbol===state.selected)}
-function populate(){const s=$("symbol");const q=String($("tickerSearch")?.value||"").trim().toLowerCase();const list=(state.assets.length?state.assets:state.market).filter(x=>!q||x.symbol.toLowerCase().includes(q)||String(x.name||"").toLowerCase().includes(q));s.innerHTML='<option value="">SELECT SECURITY</option>'+list.map(x=>'<option value="'+esc(x.symbol)+'">'+esc(x.symbol)+" — "+esc(x.name)+"</option>").join("");s.value=state.selected}
+function populate(){const s=$("symbol");const q=String($("tickerSearch")?.value||"").trim().toLowerCase();const source=state.assets.length?state.assets:state.market;let list=source.filter(x=>!q||x.symbol.toLowerCase().includes(q)||String(x.name||"").toLowerCase().includes(q));
+// Searching must never clear the currently selected security. If the current
+// selection does not match the search text, keep it in the select so the
+// browser can preserve the selected value while the search results change.
+if(state.selected){const selectedItem=source.find(x=>String(x.symbol).toUpperCase()===String(state.selected).toUpperCase());if(selectedItem&&!list.some(x=>String(x.symbol).toUpperCase()===String(state.selected).toUpperCase()))list=[selectedItem,...list];}
+s.innerHTML='<option value="">SELECT SECURITY</option>'+list.map(x=>'<option value="'+esc(x.symbol)+'">'+esc(x.symbol)+" — "+esc(x.name)+"</option>").join("");s.value=state.selected}
 function renderHeader(){const p=state.player;if(!p)return;$("cash").textContent=money(p.cash);$("portfolio").textContent=money(p.portfolioValue);$("level").textContent=p.level;$("nameBtn").textContent=p.name||"GUEST"}
 function renderWatchlist(){
   // Keep Market Watch in the user's saved order. Live Alpaca updates must never reorder rows.
