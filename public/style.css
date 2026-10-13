@@ -1418,3 +1418,16 @@
     transform:translateY(8px)!important;
   }
 }
+
+
+/* Keep the PUTS heading visually aligned farther right on desktop and mobile. */
+#optionChain .chain-table thead tr:first-child th.put{
+  text-align:right!important;
+  padding-right:42px!important;
+}
+@media(max-width:800px){
+  #optionChain .chain-table thead tr:first-child th.put{
+    text-align:right!important;
+    padding-right:24px!important;
+  }
+}
