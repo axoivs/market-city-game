@@ -1423,7 +1423,7 @@
 /* Keep the PUTS heading visually aligned farther right on desktop and mobile. */
 #optionChain .chain-table thead tr:first-child th.put{
   text-align:right!important;
-  padding-right:28px!important;
+  padding-right:8px!important;
 }
 @media(max-width:800px){
   #optionChain .chain-table thead tr:first-child th.put{
