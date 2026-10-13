@@ -44,6 +44,14 @@ async function getAssets(search = "") {
   return q ? assetCache.items.filter(a => a.symbol.toLowerCase().includes(q) || a.name.toLowerCase().includes(q)) : assetCache.items;
 }
 
+function plausibleStockPrice(price, reference) {
+  const p = Number(price), r = Number(reference);
+  if (!Number.isFinite(p) || p <= 0) return false;
+  // Reject malformed/stale prints (for example AAPL at $0.01) when they
+  // are wildly inconsistent with the latest real daily close.
+  return !Number.isFinite(r) || r <= 0 || Math.abs(p - r) / r <= 0.50;
+}
+
 function marketDateKey(value) {
   return new Intl.DateTimeFormat("en-CA", {
     timeZone: "America/New_York",
@@ -71,7 +79,11 @@ async function getStockQuote(symbol) {
   ]);
   const q = quotes?.quotes?.[s] || {}, t = trades?.trades?.[s] || {}, b = Array.isArray(bars?.bars?.[s]) ? bars.bars[s] : [];
   const bid = Number(q.bp), ask = Number(q.ap), last = Number(t.p);
-  const price = finite(last) && last > 0 ? last : (finite(ask) && ask > 0 ? ask : (finite(bid) && bid > 0 ? bid : null));
+  const latestBarClose = b.length ? Number(b[b.length - 1].c) : null;
+  const referencePrice = finite(latestBarClose) && latestBarClose > 0 ? latestBarClose : null;
+  const candidates = [last, ask, bid];
+  const price = candidates.find(p => plausibleStockPrice(p, referencePrice)) ||
+    (finite(referencePrice) && referencePrice > 0 ? referencePrice : null);
   const usableBars = previousTradingDayBars(b, 5);
   const history = usableBars.map(x => Number(x.c));
   const historyDates = usableBars.map(x => x.t);
@@ -147,19 +159,24 @@ function applyStock(msg) {
   const stock = marketRef?.[msg.S];
   if (!stock) return;
   const ts = msg.t ? Date.parse(msg.t) : Date.now();
+  const referencePrice = finite(stock.previousClose) && stock.previousClose > 0
+    ? stock.previousClose
+    : (finite(stock.open) && stock.open > 0 ? stock.open : stock.price);
   if (msg.T === "q") {
     const bid = Number(msg.bp), ask = Number(msg.ap);
-    if (Number.isFinite(bid) && bid > 0) stock.bid = bid;
-    if (Number.isFinite(ask) && ask > 0) stock.ask = ask;
-    const px = Number.isFinite(ask) && ask > 0 ? ask : bid;
-    if (Number.isFinite(px) && px > 0) stock.price = roundRef(px);
+    if (plausibleStockPrice(bid, referencePrice)) stock.bid = bid;
+    if (plausibleStockPrice(ask, referencePrice)) stock.ask = ask;
+    const px = plausibleStockPrice(ask, referencePrice) ? ask : bid;
+    if (plausibleStockPrice(px, referencePrice)) stock.price = roundRef(px);
   } else if (msg.T === "t") {
     const px = Number(msg.p);
-    if (Number.isFinite(px) && px > 0) stock.price = roundRef(px);
+    if (plausibleStockPrice(px, referencePrice)) stock.price = roundRef(px);
+    else console.warn("Ignored implausible Alpaca stock trade:", msg.S, px, "reference", referencePrice);
     stock.lastTradeAt = ts;
   } else if (msg.T === "b" || msg.T === "d" || msg.T === "u") {
-    if (Number.isFinite(Number(msg.c))) stock.price = roundRef(Number(msg.c));
-    if (msg.T === "d" && Number.isFinite(Number(msg.o))) stock.open = roundRef(Number(msg.o));
+    const px = Number(msg.c);
+    if (plausibleStockPrice(px, referencePrice)) stock.price = roundRef(px);
+    if (msg.T === "d" && plausibleStockPrice(Number(msg.o), referencePrice)) stock.open = roundRef(Number(msg.o));
   }
   stock.updatedAt = ts;
   stock.stream = true;
@@ -252,21 +269,24 @@ async function refreshMarket(market, symbols, round) {
     const bidPx = Number(quote.bp);
     const askPx = Number(quote.ap);
     const tradePx = Number(trade.p);
+    const realBars = Array.isArray(bmap[symbol]) ? bmap[symbol] : [];
+    const latestBarClose = realBars.length ? Number(realBars[realBars.length - 1].c) : null;
+    const referencePrice = finite(latestBarClose) && latestBarClose > 0
+      ? latestBarClose
+      : (finite(stock.previousClose) && stock.previousClose > 0 ? stock.previousClose : null);
+    const candidates = [tradePx, askPx, bidPx];
+    let price = candidates.find(p => plausibleStockPrice(p, referencePrice));
+    if (!finite(price) && finite(referencePrice) && referencePrice > 0) price = referencePrice;
 
-    let price = Number.isFinite(tradePx) && tradePx > 0 ? tradePx :
-      (Number.isFinite(askPx) && askPx > 0 ? askPx :
-      (Number.isFinite(bidPx) && bidPx > 0 ? bidPx : NaN));
-
-    if (Number.isFinite(price) && price > 0) {
+    if (finite(price) && price > 0) {
       stock.price = round(price);
       loaded++;
     }
-    if (Number.isFinite(bidPx) && bidPx > 0) stock.bid = round(bidPx);
-    if (Number.isFinite(askPx) && askPx > 0) stock.ask = round(askPx);
+    if (plausibleStockPrice(bidPx, referencePrice)) stock.bid = round(bidPx);
+    if (plausibleStockPrice(askPx, referencePrice)) stock.ask = round(askPx);
 
     stock.updatedAt = trade.t ? Date.parse(trade.t) : (quote.t ? Date.parse(quote.t) : Date.now());
     stock.lastTradeAt = trade.t ? Date.parse(trade.t) : null;
-    const realBars = Array.isArray(bmap[symbol]) ? bmap[symbol] : [];
     const usableBars = previousTradingDayBars(realBars, 5);
     const barHistory = usableBars.map(b => Number(b.c));
     if (barHistory.length) {
